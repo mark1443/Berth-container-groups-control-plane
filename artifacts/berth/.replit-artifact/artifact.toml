@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Berth"
+description = "Berth is an operator console for containers that are already running on Docker hosts (EC2 / VPS over SSH) and on ECS clusters (EC2 launch type). It discovers every container and task, lets the operator bundle them into named groups, takes one entry port per group and does all host/container port bookkeeping collision-free, manages environment variables and secrets (encrypted, or referenced from AWS SSM / Secrets Manager), and wires the members of a group together on a private network with injected SVC_* variables. Changes are applied through idempotent, logged operations with a step timeline."
+version = "1.0.0"
+id = "artifacts/berth"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24043
+
+[services.development]
+run = "pnpm --filter @workspace/berth run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/berth", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/berth/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24043"
+BASE_PATH = "/"

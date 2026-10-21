@@ -1,0 +1,47 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "qkfxiGWlkqBKbLgvQy514"
+uri = "file://.local/conversation-workspace/files/docs/berth-design-and-architecture.html"
+type = "html"
+title = "Berth — Design and Architecture (accepted, v0.2)"
+description = "Updated for the approval decisions: ECS EC2 launch type with bridge networking (allocator works on ECS too), control plane as a Replit deployment. Statuses set to Accepted; open questions 1 and 4 resolved."
+logical_id = "478dc38b-1c5f-479f-bafe-7ecfb83f5769"
+content_hash = "sha256:1546567e83a0d3b8f1aba3f40a9b0f12cde07ebaf2ef896a21eb6ad6557a9f43"
+size = 73734
+mtime_ms = 1792592218082
+storage_uri = "gcs://replit-rams-assets-reed/rams/assets/conversation:90145273-31df-4f69-93f0-bc83e9a27e2d/478dc38b-1c5f-479f-bafe-7ecfb83f5769/d011ffad-530e-4771-af58-1c8f01a07b50"
+storage_version_token = "1792592218629201"
+content_type = "text/html"
+source_uri = "file://docs/berth-design-and-architecture.html"
+
+[[outputs]]
+id = "-1l5CChccU_1YUYk5dv3r"
+uri = "file://.local/conversation-workspace/files/tasks/plan.md"
+type = "text"
+title = "Berth — Implementation Plan (for approval)"
+description = "Six phases, 20 tasks, six checkpoints. Read-only against your infrastructure until Phase 5. Includes dependency graph, parallelization, risks, and remaining open questions."
+logical_id = "b20b3f4b-24b8-46dc-886d-219fc7f7df22"
+content_hash = "sha256:a5a87dc7d8baec6998628ea26641f71892c411e36c8eb0e81801dd948c4c4a06"
+size = 9474
+mtime_ms = 1792591999129
+storage_uri = "gcs://replit-rams-assets-reed/rams/assets/conversation:90145273-31df-4f69-93f0-bc83e9a27e2d/b20b3f4b-24b8-46dc-886d-219fc7f7df22/361bbd44-0093-4581-8888-20e6f4c19d6e"
+storage_version_token = "1792592219467700"
+content_type = "text/markdown"
+source_uri = "file://tasks/plan.md"
+
+[[outputs]]
+id = "IEjcgAqFrv54HfnfUN-S5"
+uri = "file://.local/conversation-workspace/files/tasks/todo.md"
+type = "text"
+title = "Berth — Task List (20 tasks)"
+description = "Every task with acceptance criteria, verification commands, dependencies, files touched, and size. Checkpoints A–F between phases."
+logical_id = "94a2d882-5597-4984-94d8-8c76d5178ed4"
+content_hash = "sha256:4b492eade9da87c6c2dad6f5241f1be978dd6214769ac27ec46a1ee7af384a4b"
+size = 27712
+mtime_ms = 1792592130649
+storage_uri = "gcs://replit-rams-assets-reed/rams/assets/conversation:90145273-31df-4f69-93f0-bc83e9a27e2d/94a2d882-5597-4984-94d8-8c76d5178ed4/3311f035-c272-4efc-a6db-138bbb24fd23"
+storage_version_token = "1792592220283979"
+content_type = "text/markdown"
+source_uri = "file://tasks/todo.md"

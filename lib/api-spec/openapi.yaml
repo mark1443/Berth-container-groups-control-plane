@@ -3,13 +3,30 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: |
+    Berth control-plane API. Conventions: plural nouns, camelCase fields and query
+    params, UPPER_SNAKE enums, one error shape (`ErrorResponse`), every list paginated,
+    additive changes only. Secret values never appear in any response.
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: Auth
+    description: Browser and mobile authentication endpoints.
+  - name: providers
+    description: Docker hosts and ECS clusters Berth can reach
+  - name: workloads
+    description: Observed containers and tasks (read-only inventory)
+  - name: groups
+    description: Named sets of workloads with port bookkeeping
+  - name: config
+    description: Environment variables and secrets per group and member
+  - name: apply
+    description: Dry-run plans and idempotent apply operations
+  - name: overview
+    description: Dashboard summaries and the activity feed
 paths:
   /healthz:
     get:
@@ -24,13 +41,1899 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/user:
+    get:
+      tags: [Auth]
+      operationId: getCurrentAuthUser
+      summary: Get the currently authenticated user
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationSessionHeader"
+        - $ref: "#/components/parameters/SessionCookie"
+      responses:
+        "200":
+          description: Auth status resolved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUserEnvelope"
+  /login:
+    get:
+      tags: [Auth]
+      operationId: beginBrowserLogin
+      summary: Start the browser OIDC login flow
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          description: Relative path to redirect to after login (must start with `/`). Defaults to `/`.
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to the OIDC authorization endpoint.
+  /callback:
+    get:
+      tags: [Auth]
+      operationId: handleBrowserLoginCallback
+      summary: Complete the browser OIDC login flow
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: iss
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        "302":
+          description: Redirect to the `returnTo` path on success (defaults to `/`) or `/api/login` on failure.
+  /logout:
+    get:
+      tags: [Auth]
+      operationId: logoutBrowserSession
+      summary: Clear the session and begin OIDC logout
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationSessionHeader"
+        - $ref: "#/components/parameters/SessionCookie"
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+            default: /
+      responses:
+        "302":
+          description: Redirect to the OIDC provider logout URL with a post-logout redirect back to the validated `returnTo` path.
+  /mobile-auth/token-exchange:
+    post:
+      tags: [Auth]
+      operationId: exchangeMobileAuthorizationCode
+      summary: Exchange a mobile OIDC code for a session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileTokenExchangeRequest"
+      responses:
+        "200":
+          description: Session created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileTokenExchangeSuccess"
+        "400":
+          description: Missing or invalid required fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Token did not contain usable claims.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          description: Token exchange failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /mobile-auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutMobileSession
+      summary: Delete a mobile session token
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationSessionHeader"
+      responses:
+        "200":
+          description: Logout processed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutSuccess"
+
+  /overview:
+    get:
+      operationId: getOverview
+      tags: [overview]
+      summary: Dashboard summary
+      description: Counts per provider, workload, group and operation state, plus recent operations and drifted groups.
+      responses:
+        "200":
+          description: Overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Overview"
+  /events:
+    get:
+      operationId: listEvents
+      tags: [overview]
+      summary: Activity feed
+      description: Audit trail of everything that happened in Berth, newest first.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: groupId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: providerId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityEventList"
+
+  /providers:
+    get:
+      operationId: listProviders
+      tags: [providers]
+      summary: List providers
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: kind
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ProviderKind"
+      responses:
+        "200":
+          description: Providers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderList"
+    post:
+      operationId: createProvider
+      tags: [providers]
+      summary: Register a provider
+      description: Stores the credential encrypted, runs a connectivity check and returns the provider with its resulting status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /providers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getProvider
+      tags: [providers]
+      summary: Get a provider
+      responses:
+        "200":
+          description: Provider
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateProvider
+      tags: [providers]
+      summary: Update provider settings or credential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+    delete:
+      operationId: deleteProvider
+      tags: [providers]
+      summary: Remove a provider
+      description: Fails with `409 PROVIDER_HAS_GROUPS` while groups exist on it.
+      responses:
+        "204":
+          description: Removed
+        "409":
+          description: Provider still has groups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /providers/{id}/connectivity-checks:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: checkProviderConnectivity
+      tags: [providers]
+      summary: Re-test the provider credential and transport
+      responses:
+        "200":
+          description: Connectivity report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectivityReport"
+  /providers/{id}/discoveries:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: runProviderDiscovery
+      tags: [providers]
+      summary: Run a discovery pass now
+      description: Lists workloads on the provider and upserts the inventory without waiting for the next poll.
+      responses:
+        "200":
+          description: Discovery result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryResult"
+  /providers/{id}/port-usage:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getProviderPortUsage
+      tags: [providers]
+      summary: Host ports in use on this provider
+      description: Berth's own allocations plus ports bound by unmanaged workloads, so an operator can pick a free entry port.
+      responses:
+        "200":
+          description: Port usage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortUsage"
+
+  /workloads:
+    get:
+      operationId: listWorkloads
+      tags: [workloads]
+      summary: Inventory of observed workloads
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: providerId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/WorkloadStatus"
+        - name: managed
+          in: query
+          required: false
+          description: "true = only group members, false = only unmanaged workloads"
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive match on name or image
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Workloads
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkloadList"
+  /workloads/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getWorkload
+      tags: [workloads]
+      summary: Workload detail
+      responses:
+        "200":
+          description: Workload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkloadDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /groups:
+    get:
+      operationId: listGroups
+      tags: [groups]
+      summary: List groups
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: providerId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/GroupStatus"
+      responses:
+        "200":
+          description: Groups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupList"
+    post:
+      operationId: createGroup
+      tags: [groups]
+      summary: Create a group
+      description: Reserves the entry port on the provider (a second group asking for the same port gets `409 PORT_IN_USE`) and returns the group in `DRAFT`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupDetail"
+        "409":
+          description: Port already allocated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /groups/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getGroup
+      tags: [groups]
+      summary: Group detail with members and allocations
+      responses:
+        "200":
+          description: Group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateGroup
+      tags: [groups]
+      summary: Update a group
+      description: Changing `entryPort` claims the new port first and releases the old one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupDetail"
+        "409":
+          description: Port already allocated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteGroup
+      tags: [groups]
+      summary: Delete a group
+      description: Releases all port allocations and records a release of the group network.
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: An operation is in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /groups/{id}/members:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: addGroupMember
+      tags: [groups]
+      summary: Add a workload to the group
+      description: A second `ENTRY` member is `422 ENTRY_ALREADY_SET`. `EXPOSED` members get a host port allocated from the provider range.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupMemberInput"
+      responses:
+        "201":
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMember"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /groups/{id}/members/{memberId}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/MemberId"
+    patch:
+      operationId: updateGroupMember
+      tags: [groups]
+      summary: Change a member's role, service name, container port or health check
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupMemberUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMember"
+    delete:
+      operationId: removeGroupMember
+      tags: [groups]
+      summary: Remove a member
+      description: Releases any host port allocated to the member.
+      responses:
+        "204":
+          description: Removed
+  /groups/{id}/ports:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: listGroupPorts
+      tags: [groups]
+      summary: Port allocations of the group
+      description: Current `RESERVED` and `APPLIED` rows; released rows are kept for audit and omitted here.
+      responses:
+        "200":
+          description: Allocations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortAllocationList"
+  /groups/{id}/config:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getGroupConfig
+      tags: [config]
+      summary: Group-scope config entries
+      responses:
+        "200":
+          description: Entries (secret values masked)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigEntryList"
+    patch:
+      operationId: patchGroupConfig
+      tags: [config]
+      summary: Set or remove group-scope entries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigPatch"
+      responses:
+        "200":
+          description: Entries after the change
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigEntryList"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /groups/{id}/members/{memberId}/config:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/MemberId"
+    get:
+      operationId: getMemberConfig
+      tags: [config]
+      summary: Member-scope config entries
+      responses:
+        "200":
+          description: Entries (secret values masked)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigEntryList"
+    patch:
+      operationId: patchMemberConfig
+      tags: [config]
+      summary: Set or remove member-scope entries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigPatch"
+      responses:
+        "200":
+          description: Entries after the change
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigEntryList"
+  /groups/{id}/members/{memberId}/env:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/MemberId"
+    get:
+      operationId: getMemberEnv
+      tags: [config]
+      summary: Effective environment of a member
+      description: Group entries, overridden by member entries, plus the injected `BERTH_*` and `SVC_*` wiring variables. Secret values are masked.
+      responses:
+        "200":
+          description: Rendered environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderedEnv"
+  /groups/{id}/plan:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getGroupPlan
+      tags: [apply]
+      summary: Dry run
+      description: The ordered steps an apply would execute now, computed from desired versus observed state.
+      responses:
+        "200":
+          description: Plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplyPlan"
+  /groups/{id}/applies:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: createGroupApply
+      tags: [apply]
+      summary: Apply the group's desired state
+      description: Requires an `Idempotency-Key` header. Same key and body replays the original operation with `200`; same key with a different body is `422 IDEMPOTENCY_KEY_REUSED`; an apply while one is running is `409 OPERATION_IN_PROGRESS`.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyInput"
+      responses:
+        "202":
+          description: Operation accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        "200":
+          description: Replay of an earlier operation with the same key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        "409":
+          description: Operation in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Idempotency key reused with a different body, or the group is not applicable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /operations:
+    get:
+      operationId: listOperations
+      tags: [apply]
+      summary: Operation history
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: groupId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/OperationState"
+      responses:
+        "200":
+          description: Operations, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationList"
+  /operations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getOperation
+      tags: [apply]
+      summary: Operation with its step timeline
+      responses:
+        "200":
+          description: Operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    MemberId:
+      name: memberId
+      in: path
+      required: true
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    AuthorizationSessionHeader:
+      name: Authorization
+      in: header
+      required: false
+      description: Opaque session token — `Bearer <sid>`.
+      schema:
+        type: string
+    SessionCookie:
+      name: sid
+      in: cookie
+      required: false
+      description: Browser session cookie.
+      schema:
+        type: string
+
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
+        version:
+          type: string
 
+    # ----- auth (Replit Auth) -------------------------------------------------
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl]
+      properties:
+        id:
+          type: string
+        email:
+          type: [string, "null"]
+          format: email
+        firstName:
+          type: [string, "null"]
+        lastName:
+          type: [string, "null"]
+        profileImageUrl:
+          type: [string, "null"]
+    AuthUserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/AuthUser"
+            - type: "null"
+    MobileTokenExchangeRequest:
+      type: object
+      required: [code, code_verifier, redirect_uri, state]
+      properties:
+        code:
+          type: string
+          minLength: 1
+        code_verifier:
+          type: string
+          minLength: 1
+        redirect_uri:
+          type: string
+          minLength: 1
+          format: uri
+        state:
+          type: string
+          minLength: 1
+        nonce:
+          type: string
+          minLength: 1
+    MobileTokenExchangeSuccess:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+    LogoutSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    # ----- common ---------------------------------------------------------------
+    ErrorCode:
+      type: string
+      enum:
+        - BAD_REQUEST
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - NOT_FOUND
+        - ALREADY_EXISTS
+        - VALIDATION_ERROR
+        - PORT_IN_USE
+        - PORT_RANGE_EXHAUSTED
+        - OPERATION_IN_PROGRESS
+        - PROVIDER_HAS_GROUPS
+        - ENTRY_ALREADY_SET
+        - ENTRY_REQUIRED
+        - WORKLOAD_ALREADY_MEMBER
+        - WORKLOAD_PROVIDER_MISMATCH
+        - IDEMPOTENCY_KEY_REUSED
+        - CAPABILITY_NOT_SUPPORTED
+        - PROVIDER_UNREACHABLE
+        - PROVIDER_REJECTED
+        - INTERNAL
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorBody"
+    Pagination:
+      type: object
+      required: [page, pageSize, totalItems, totalPages]
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalItems:
+          type: integer
+        totalPages:
+          type: integer
+    Protocol:
+      type: string
+      enum: [TCP, UDP]
+
+    # ----- providers ------------------------------------------------------------
+    ProviderKind:
+      type: string
+      enum: [DOCKER_HOST, ECS_CLUSTER]
+    ProviderStatus:
+      type: string
+      enum: [ONLINE, OFFLINE, DEGRADED]
+    DockerTransport:
+      type: string
+      enum: [SSH, TCP_TLS]
+    ServiceDiscoveryKind:
+      type: string
+      enum: [DOCKER_DNS, SERVICE_CONNECT]
+    CredentialKind:
+      type: string
+      enum: [SSH_KEY, TLS_BUNDLE, AWS_KEYS, AWS_ROLE]
+    ProviderCapabilities:
+      type: object
+      required: [canChooseHostPort, canRecreateInPlace, supportsNativeSecrets, supportsEvents, serviceDiscovery]
+      properties:
+        canChooseHostPort:
+          type: boolean
+        canRecreateInPlace:
+          type: boolean
+        supportsNativeSecrets:
+          type: boolean
+        supportsEvents:
+          type: boolean
+        serviceDiscovery:
+          $ref: "#/components/schemas/ServiceDiscoveryKind"
+    ProviderSettings:
+      type: object
+      description: "Kind-specific settings. Docker hosts use transport/host/port/sshUser; ECS clusters use region/clusterArn/vpcId. The port range applies to both."
+      properties:
+        transport:
+          $ref: "#/components/schemas/DockerTransport"
+        host:
+          type: string
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        sshUser:
+          type: string
+        region:
+          type: string
+        clusterArn:
+          type: string
+        vpcId:
+          type: string
+        portRangeStart:
+          type: integer
+          minimum: 1024
+          maximum: 65535
+        portRangeEnd:
+          type: integer
+          minimum: 1024
+          maximum: 65535
+    ProviderCredentialInput:
+      type: object
+      description: Write-only. Stored encrypted; never returned.
+      required: [kind]
+      properties:
+        kind:
+          $ref: "#/components/schemas/CredentialKind"
+        privateKey:
+          type: string
+          description: PEM private key for SSH_KEY
+        passphrase:
+          type: string
+        caCert:
+          type: string
+          description: PEM for TLS_BUNDLE
+        clientCert:
+          type: string
+        clientKey:
+          type: string
+        accessKeyId:
+          type: string
+          description: AWS_KEYS
+        secretAccessKey:
+          type: string
+        sessionToken:
+          type: string
+        roleArn:
+          type: string
+          description: AWS_ROLE (assumed with the control plane's own identity)
+        externalId:
+          type: string
+    ProviderCredentialSummary:
+      type: object
+      required: [kind, keyVersion, updatedAt]
+      properties:
+        kind:
+          $ref: "#/components/schemas/CredentialKind"
+        keyVersion:
+          type: integer
+        publicKey:
+          type: [string, "null"]
+          description: OpenSSH public key derived from the SSH private key, for `authorized_keys`
+        fingerprint:
+          type: [string, "null"]
+        updatedAt:
+          type: string
+          format: date-time
+    Provider:
+      type: object
+      required: [id, kind, name, status, lastSeenAt, lastError, capabilities, settings, credential, workloadCount, groupCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/ProviderKind"
+        name:
+          type: string
+        status:
+          $ref: "#/components/schemas/ProviderStatus"
+        lastSeenAt:
+          type: [string, "null"]
+          format: date-time
+        lastError:
+          type: [string, "null"]
+        capabilities:
+          $ref: "#/components/schemas/ProviderCapabilities"
+        settings:
+          $ref: "#/components/schemas/ProviderSettings"
+        credential:
+          oneOf:
+            - $ref: "#/components/schemas/ProviderCredentialSummary"
+            - type: "null"
+        workloadCount:
+          type: integer
+        groupCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProviderInput:
+      type: object
+      required: [kind, name, settings, credential]
+      properties:
+        kind:
+          $ref: "#/components/schemas/ProviderKind"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        settings:
+          $ref: "#/components/schemas/ProviderSettings"
+        credential:
+          $ref: "#/components/schemas/ProviderCredentialInput"
+    ProviderUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        settings:
+          $ref: "#/components/schemas/ProviderSettings"
+        credential:
+          $ref: "#/components/schemas/ProviderCredentialInput"
+    ProviderList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Provider"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+    ConnectivityReport:
+      type: object
+      required: [ok, checkedAt, message, status, details]
+      properties:
+        ok:
+          type: boolean
+        status:
+          $ref: "#/components/schemas/ProviderStatus"
+        checkedAt:
+          type: string
+          format: date-time
+        latencyMs:
+          type: [integer, "null"]
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+          description: "Runtime facts such as dockerVersion, containerCount, clusterStatus, instanceCount"
+    DiscoveryResult:
+      type: object
+      required: [providerId, status, observedCount, startedAt, finishedAt, message]
+      properties:
+        providerId:
+          type: string
+        status:
+          $ref: "#/components/schemas/ProviderStatus"
+        observedCount:
+          type: integer
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+    PortOwner:
+      type: string
+      enum: [BERTH, UNMANAGED]
+    PortUsageEntry:
+      type: object
+      required: [hostPort, protocol, owner, groupId, groupName, workloadId, workloadName]
+      properties:
+        hostPort:
+          type: integer
+        protocol:
+          $ref: "#/components/schemas/Protocol"
+        owner:
+          $ref: "#/components/schemas/PortOwner"
+        groupId:
+          type: [string, "null"]
+        groupName:
+          type: [string, "null"]
+        workloadId:
+          type: [string, "null"]
+        workloadName:
+          type: [string, "null"]
+    PortUsage:
+      type: object
+      required: [providerId, rangeStart, rangeEnd, used, freeInRange]
+      properties:
+        providerId:
+          type: string
+        rangeStart:
+          type: integer
+        rangeEnd:
+          type: integer
+        used:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortUsageEntry"
+        freeInRange:
+          type: integer
+
+    # ----- workloads ------------------------------------------------------------
+    WorkloadStatus:
+      type: string
+      enum: [RUNNING, STOPPED, MISSING, UNKNOWN]
+    PortBinding:
+      type: object
+      required: [containerPort, hostPort, protocol]
+      properties:
+        containerPort:
+          type: integer
+        hostPort:
+          type: [integer, "null"]
+        protocol:
+          $ref: "#/components/schemas/Protocol"
+        hostIp:
+          type: [string, "null"]
+    WorkloadMembership:
+      type: object
+      required: [groupId, groupName, memberId, serviceName, role]
+      properties:
+        groupId:
+          type: string
+        groupName:
+          type: string
+        memberId:
+          type: string
+        serviceName:
+          type: string
+        role:
+          $ref: "#/components/schemas/MemberRole"
+    Workload:
+      type: object
+      required: [id, providerId, providerName, providerKind, externalId, name, image, status, ports, networks, labels, envHash, membership, firstSeenAt, observedAt]
+      properties:
+        id:
+          type: string
+        providerId:
+          type: string
+        providerName:
+          type: string
+        providerKind:
+          $ref: "#/components/schemas/ProviderKind"
+        externalId:
+          type: string
+          description: Container id or task ARN
+        name:
+          type: string
+        image:
+          type: string
+        status:
+          $ref: "#/components/schemas/WorkloadStatus"
+        ports:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortBinding"
+        networks:
+          type: array
+          items:
+            type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        envHash:
+          type: [string, "null"]
+        membership:
+          oneOf:
+            - $ref: "#/components/schemas/WorkloadMembership"
+            - type: "null"
+        firstSeenAt:
+          type: string
+          format: date-time
+        observedAt:
+          type: string
+          format: date-time
+    Mount:
+      type: object
+      required: [destination, source, type, anonymous]
+      properties:
+        destination:
+          type: string
+        source:
+          type: [string, "null"]
+        type:
+          type: string
+        anonymous:
+          type: boolean
+          description: Anonymous volumes cannot be carried across a recreate
+    WorkloadDetail:
+      allOf:
+        - $ref: "#/components/schemas/Workload"
+        - type: object
+          required: [command, mounts, restartPolicy, health, runtime]
+          properties:
+            command:
+              type: array
+              items:
+                type: string
+            mounts:
+              type: array
+              items:
+                $ref: "#/components/schemas/Mount"
+            restartPolicy:
+              type: [string, "null"]
+            health:
+              type: [string, "null"]
+            runtime:
+              type: object
+              additionalProperties: true
+              description: "Runtime-specific facts (Docker: created, state; ECS: serviceName, taskDefinitionArn, launchType, networkMode)"
+    WorkloadList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Workload"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ----- groups ---------------------------------------------------------------
+    GroupStatus:
+      type: string
+      enum: [DRAFT, APPLYING, APPLIED, DRIFTED, FAILED]
+    MemberRole:
+      type: string
+      enum: [ENTRY, INTERNAL, EXPOSED]
+    HealthCheckKind:
+      type: string
+      enum: [TCP, HTTP]
+    HealthCheck:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          $ref: "#/components/schemas/HealthCheckKind"
+        path:
+          type: string
+          description: HTTP only
+        timeoutSeconds:
+          type: integer
+          minimum: 1
+          maximum: 300
+    GroupMember:
+      type: object
+      required: [id, groupId, workloadId, workloadName, workloadImage, workloadStatus, serviceName, role, containerPort, hostPort, healthCheck, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        groupId:
+          type: string
+        workloadId:
+          type: string
+        workloadName:
+          type: string
+        workloadImage:
+          type: string
+        workloadStatus:
+          $ref: "#/components/schemas/WorkloadStatus"
+        serviceName:
+          type: string
+        role:
+          $ref: "#/components/schemas/MemberRole"
+        containerPort:
+          type: integer
+        hostPort:
+          type: [integer, "null"]
+          description: Entry port for ENTRY, allocated port for EXPOSED, null for INTERNAL
+        healthCheck:
+          oneOf:
+            - $ref: "#/components/schemas/HealthCheck"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    GroupMemberInput:
+      type: object
+      required: [workloadId, containerPort]
+      properties:
+        workloadId:
+          type: string
+        serviceName:
+          type: string
+          pattern: "^[a-z][a-z0-9-]{0,62}$"
+          description: DNS-safe name other members use; defaults to the workload name slugified
+        role:
+          $ref: "#/components/schemas/MemberRole"
+        containerPort:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        healthCheck:
+          $ref: "#/components/schemas/HealthCheck"
+    GroupMemberUpdate:
+      type: object
+      properties:
+        serviceName:
+          type: string
+          pattern: "^[a-z][a-z0-9-]{0,62}$"
+        role:
+          $ref: "#/components/schemas/MemberRole"
+        containerPort:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        healthCheck:
+          oneOf:
+            - $ref: "#/components/schemas/HealthCheck"
+            - type: "null"
+    GroupSummary:
+      type: object
+      required: [id, providerId, providerName, providerKind, name, description, entryPort, protocol, status, networkRef, injectionPrefix, injectionVersion, driftReasons, memberCount, lastAppliedAt, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        providerId:
+          type: string
+        providerName:
+          type: string
+        providerKind:
+          $ref: "#/components/schemas/ProviderKind"
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        entryPort:
+          type: integer
+        protocol:
+          $ref: "#/components/schemas/Protocol"
+        status:
+          $ref: "#/components/schemas/GroupStatus"
+        networkRef:
+          type: [string, "null"]
+          description: Docker network name or Cloud Map namespace id once applied
+        injectionPrefix:
+          type: string
+        injectionVersion:
+          type: integer
+        driftReasons:
+          type: array
+          items:
+            type: string
+        memberCount:
+          type: integer
+        lastAppliedAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    GroupDetail:
+      allOf:
+        - $ref: "#/components/schemas/GroupSummary"
+        - type: object
+          required: [members, allocations]
+          properties:
+            members:
+              type: array
+              items:
+                $ref: "#/components/schemas/GroupMember"
+            allocations:
+              type: array
+              items:
+                $ref: "#/components/schemas/PortAllocation"
+    GroupInput:
+      type: object
+      required: [providerId, name, entryPort]
+      properties:
+        providerId:
+          type: string
+        name:
+          type: string
+          pattern: "^[a-z][a-z0-9-]{0,62}$"
+        description:
+          type: string
+          maxLength: 500
+        entryPort:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        protocol:
+          $ref: "#/components/schemas/Protocol"
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupMemberInput"
+    GroupUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          pattern: "^[a-z][a-z0-9-]{0,62}$"
+        description:
+          type: [string, "null"]
+          maxLength: 500
+        entryPort:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        protocol:
+          $ref: "#/components/schemas/Protocol"
+    GroupList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupSummary"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+    AllocationState:
+      type: string
+      enum: [RESERVED, APPLIED, RELEASED]
+    PortAllocation:
+      type: object
+      required: [id, providerId, groupId, memberId, hostPort, protocol, state, createdAt, releasedAt]
+      properties:
+        id:
+          type: string
+        providerId:
+          type: string
+        groupId:
+          type: string
+        memberId:
+          type: [string, "null"]
+        hostPort:
+          type: integer
+        protocol:
+          $ref: "#/components/schemas/Protocol"
+        state:
+          $ref: "#/components/schemas/AllocationState"
+        createdAt:
+          type: string
+          format: date-time
+        releasedAt:
+          type: [string, "null"]
+          format: date-time
+    PortAllocationList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortAllocation"
+
+    # ----- config ---------------------------------------------------------------
+    ConfigScope:
+      type: string
+      enum: [GROUP, MEMBER]
+    ConfigSource:
+      type: string
+      enum: [MANUAL, AWS_SSM, AWS_SECRETS_MANAGER]
+    ConfigEntry:
+      type: object
+      required: [key, scopeType, scopeId, isSecret, source, valuePresent, value, sourceRef, updatedAt]
+      properties:
+        key:
+          type: string
+        scopeType:
+          $ref: "#/components/schemas/ConfigScope"
+        scopeId:
+          type: string
+        isSecret:
+          type: boolean
+        source:
+          $ref: "#/components/schemas/ConfigSource"
+        valuePresent:
+          type: boolean
+        value:
+          type: [string, "null"]
+          description: Plain value for non-secret MANUAL entries; always null for secrets
+        sourceRef:
+          type: [string, "null"]
+          description: SSM parameter name or Secrets Manager ARN
+        updatedAt:
+          type: string
+          format: date-time
+    ConfigEntryList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConfigEntry"
+    ConfigEntryInput:
+      type: object
+      required: [key]
+      properties:
+        key:
+          type: string
+          pattern: "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+        value:
+          type: string
+          description: MANUAL source
+        isSecret:
+          type: boolean
+        source:
+          $ref: "#/components/schemas/ConfigSource"
+        sourceRef:
+          type: string
+          description: Required for AWS_SSM / AWS_SECRETS_MANAGER
+    ConfigPatch:
+      type: object
+      description: "Partial update. set upserts entries by key, remove deletes keys."
+      properties:
+        set:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConfigEntryInput"
+        remove:
+          type: array
+          items:
+            type: string
+    EnvOrigin:
+      type: string
+      enum: [GROUP, MEMBER, INJECTED]
+    RenderedEnvEntry:
+      type: object
+      required: [key, value, origin, isSecret, source, sourceRef]
+      properties:
+        key:
+          type: string
+        value:
+          type: [string, "null"]
+          description: Null when the value is a secret
+        origin:
+          $ref: "#/components/schemas/EnvOrigin"
+        isSecret:
+          type: boolean
+        source:
+          oneOf:
+            - $ref: "#/components/schemas/ConfigSource"
+            - type: "null"
+        sourceRef:
+          type: [string, "null"]
+    RenderedEnv:
+      type: object
+      required: [groupId, memberId, serviceName, entries]
+      properties:
+        groupId:
+          type: string
+        memberId:
+          type: string
+        serviceName:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/RenderedEnvEntry"
+
+    # ----- apply ----------------------------------------------------------------
+    StepKind:
+      type: string
+      enum: [ENSURE_NETWORK, APPLY_MEMBER, OPEN_INGRESS, RELEASE_PORT, RELEASE_NETWORK]
+    PlanStep:
+      type: object
+      required: [index, kind, memberId, serviceName, summary, changes]
+      properties:
+        index:
+          type: integer
+        kind:
+          $ref: "#/components/schemas/StepKind"
+        memberId:
+          type: [string, "null"]
+        serviceName:
+          type: [string, "null"]
+        summary:
+          type: string
+        changes:
+          type: array
+          items:
+            type: string
+    ApplyPlan:
+      type: object
+      required: [groupId, generatedAt, isNoop, applicable, steps, warnings, blockers]
+      properties:
+        groupId:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        isNoop:
+          type: boolean
+        applicable:
+          type: boolean
+          description: "False when blockers are present (no ENTRY member, provider offline, empty group)"
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlanStep"
+        warnings:
+          type: array
+          items:
+            type: string
+        blockers:
+          type: array
+          items:
+            type: string
+    ApplyInput:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 200
+    OperationKind:
+      type: string
+      enum: [APPLY, ROLLBACK, RELEASE]
+    OperationState:
+      type: string
+      enum: [PENDING, RUNNING, SUCCEEDED, FAILED, UNKNOWN]
+    StepState:
+      type: string
+      enum: [PENDING, RUNNING, SUCCEEDED, FAILED, UNKNOWN, SKIPPED, ROLLED_BACK]
+    OperationStep:
+      type: object
+      required: [index, kind, state, memberId, serviceName, summary, startedAt, finishedAt, error]
+      properties:
+        index:
+          type: integer
+        kind:
+          $ref: "#/components/schemas/StepKind"
+        state:
+          $ref: "#/components/schemas/StepState"
+        memberId:
+          type: [string, "null"]
+        serviceName:
+          type: [string, "null"]
+        summary:
+          type: string
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        finishedAt:
+          type: [string, "null"]
+          format: date-time
+        error:
+          type: [string, "null"]
+    Operation:
+      type: object
+      required: [id, groupId, groupName, kind, state, idempotencyKey, reason, steps, error, createdBy, createdAt, startedAt, finishedAt]
+      properties:
+        id:
+          type: string
+        groupId:
+          type: string
+        groupName:
+          type: string
+        kind:
+          $ref: "#/components/schemas/OperationKind"
+        state:
+          $ref: "#/components/schemas/OperationState"
+        idempotencyKey:
+          type: string
+        reason:
+          type: [string, "null"]
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationStep"
+        error:
+          type: [string, "null"]
+          description: Sanitised; never contains secret values
+        createdBy:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        finishedAt:
+          type: [string, "null"]
+          format: date-time
+    OperationList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Operation"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ----- overview -------------------------------------------------------------
+    ProviderCounts:
+      type: object
+      required: [total, online, offline, degraded]
+      properties:
+        total:
+          type: integer
+        online:
+          type: integer
+        offline:
+          type: integer
+        degraded:
+          type: integer
+    WorkloadCounts:
+      type: object
+      required: [total, running, stopped, missing, managed, unmanaged]
+      properties:
+        total:
+          type: integer
+        running:
+          type: integer
+        stopped:
+          type: integer
+        missing:
+          type: integer
+        managed:
+          type: integer
+        unmanaged:
+          type: integer
+    GroupCounts:
+      type: object
+      required: [total, draft, applying, applied, drifted, failed]
+      properties:
+        total:
+          type: integer
+        draft:
+          type: integer
+        applying:
+          type: integer
+        applied:
+          type: integer
+        drifted:
+          type: integer
+        failed:
+          type: integer
+    OperationCounts:
+      type: object
+      required: [last24h, failed24h, running, allocatedPorts]
+      properties:
+        last24h:
+          type: integer
+        failed24h:
+          type: integer
+        running:
+          type: integer
+        allocatedPorts:
+          type: integer
+    Overview:
+      type: object
+      required: [providers, workloads, groups, operations, recentOperations, driftedGroups, generatedAt]
+      properties:
+        providers:
+          $ref: "#/components/schemas/ProviderCounts"
+        workloads:
+          $ref: "#/components/schemas/WorkloadCounts"
+        groups:
+          $ref: "#/components/schemas/GroupCounts"
+        operations:
+          $ref: "#/components/schemas/OperationCounts"
+        recentOperations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Operation"
+        driftedGroups:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupSummary"
+        generatedAt:
+          type: string
+          format: date-time
+    ActivityEventKind:
+      type: string
+      enum:
+        - PROVIDER_REGISTERED
+        - PROVIDER_UPDATED
+        - PROVIDER_REMOVED
+        - PROVIDER_STATUS_CHANGED
+        - DISCOVERY_COMPLETED
+        - WORKLOAD_MISSING
+        - GROUP_CREATED
+        - GROUP_UPDATED
+        - GROUP_DELETED
+        - MEMBER_ADDED
+        - MEMBER_UPDATED
+        - MEMBER_REMOVED
+        - PORT_RESERVED
+        - PORT_RELEASED
+        - CONFIG_CHANGED
+        - OPERATION_CREATED
+        - OPERATION_FINISHED
+        - DRIFT_DETECTED
+        - OPERATOR_ADDED
+    ActivityEvent:
+      type: object
+      required: [id, kind, message, at, actor, providerId, groupId, operationId, details]
+      properties:
+        id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/ActivityEventKind"
+        message:
+          type: string
+        at:
+          type: string
+          format: date-time
+        actor:
+          type: [string, "null"]
+        providerId:
+          type: [string, "null"]
+        groupId:
+          type: [string, "null"]
+        operationId:
+          type: [string, "null"]
+        details:
+          type: object
+          additionalProperties: true
+          description: Keys only for secrets; never values
+    ActivityEventList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityEvent"
+        pagination:
+          $ref: "#/components/schemas/Pagination"

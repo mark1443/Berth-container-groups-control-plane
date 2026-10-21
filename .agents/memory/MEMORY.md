@@ -1,0 +1,5 @@
+- [OpenAPI codegen quirks](openapi-codegen-quirks.md) — orval YAML/colon quoting, zod.coerce.boolean("false") is true, parseWith typing; change the YAML first, then codegen.
+- [Monorepo TypeScript setup](monorepo-typescript.md) — shared libs need composite:true + emitDeclarationOnly; apps need their own zod dep; dom.iterable for the web lib.
+- [Postgres transaction rules](postgres-transaction-rules.md) — a raised unique violation aborts the Drizzle transaction; claim rows with ON CONFLICT DO NOTHING … RETURNING.
+- [Testing without vitest](testing-without-vitest.md) — node --test over an esbuild bundle of test/*.test.ts (inside the package so externals resolve); smoke.sh seeds a throwaway operator.
+- [Berth product facts](berth-product-facts.md) — user-stated scope (Docker over SSH + ECS EC2 launch type), checkpoint reporting cadence, what Phase 2 needs from the user.

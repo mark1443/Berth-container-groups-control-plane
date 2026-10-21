@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Berth — Design and Architecture (accepted)</title><style>
+:root{--ink:#1b1f24;--muted:#5b6470;--line:#e3e7ec;--bg:#ffffff;--soft:#f6f8fa;--accent:#0b5fff;--warn:#b35c00;--ok:#1e7f4f}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+.wrap{max-width:980px;margin:0 auto;padding:40px 28px 80px}
+header.hero{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:32px}
+header.hero h1{font-size:34px;line-height:1.15;margin:0 0 8px}
+header.hero p{margin:0;color:var(--muted)}
+.badges{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+.badge{font-size:12px;letter-spacing:.02em;text-transform:uppercase;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--muted)}
+.badge.status{border-color:#f0c58a;color:var(--warn);background:#fff7ec}.badge.status.ok{border-color:#a9d9bf;color:var(--ok);background:#eef8f2}
+.callout{border:1px solid #cfe0ff;background:#f3f7ff;border-radius:10px;padding:16px 18px;margin:0 0 32px}
+.callout h3{margin:0 0 8px;font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)}
+.callout ol{margin:0;padding-left:20px}
+nav.toc{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-bottom:36px;font-size:15px}
+nav.toc a{color:var(--ink);text-decoration:none;margin-right:16px;white-space:nowrap}
+nav.toc a:hover{color:var(--accent)}
+section.part{margin-top:56px;padding-top:24px;border-top:2px solid var(--ink)}
+section.part>h1{font-size:28px;margin:0 0 4px}
+section.part>p.lead{color:var(--muted);margin:0 0 20px}
+h2{font-size:22px;margin:36px 0 10px}
+h3{font-size:17px;margin:26px 0 8px}
+h4{font-size:15px;margin:20px 0 6px}
+p{margin:10px 0}
+code{font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+pre{background:#0f172a;color:#e5edf7;border-radius:10px;padding:14px 16px;overflow:auto;font-size:13px;line-height:1.5}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+table{width:100%;border-collapse:collapse;margin:14px 0 18px;font-size:14.5px}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--soft);font-weight:600}
+tr:nth-child(even) td{background:#fbfcfd}
+ul,ol{padding-left:24px;margin:8px 0}
+li{margin:4px 0}
+details.src{margin:10px 0 18px}
+details.src summary{cursor:pointer;color:var(--muted);font-size:14px}
+article.adr{border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:18px 0}
+article.adr h2{margin:0 0 6px;font-size:20px}
+article.adr h3{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:18px 0 6px}
+article.adr h4{margin:14px 0 4px}
+/* topology diagram */
+.diagram{display:grid;grid-template-columns:1fr 240px;gap:18px;margin:18px 0 24px}
+.dg-cp{border:1.5px solid var(--ink);border-radius:12px;padding:14px}
+.dg-title{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:10px}
+.dg-row{display:flex;align-items:stretch;gap:8px;margin:8px 0}
+.dg-box{flex:1;border:1px solid var(--line);background:var(--soft);border-radius:8px;padding:8px 10px;font-size:13.5px;font-weight:600;display:flex;flex-direction:column;justify-content:center}
+.dg-box small{display:block;font-weight:400;color:var(--muted);font-size:12px;line-height:1.35;margin-top:2px}
+.dg-db{background:#eef6f1;border-color:#bfe0cd}
+.dg-iface{background:#eaf1ff;border-color:#bcd2ff}
+.dg-ext{background:#fff;border-style:dashed}
+.dg-arrow{align-self:center;color:var(--muted)}
+.dg-targets{display:flex;flex-direction:column;justify-content:space-between;gap:10px}
+.dg-target{display:flex;flex-direction:column}
+.dg-proto{font-size:11.5px;color:var(--muted);padding-left:4px;margin-bottom:2px}
+.dg-proto::before{content:"⟶ ";color:var(--accent)}
+/* flow */
+ol.flow{counter-reset:step;list-style:none;padding:0;margin:14px 0 20px;border-left:2px solid var(--line)}
+ol.flow li{counter-increment:step;position:relative;padding:4px 0 4px 36px;margin:0 0 8px}
+ol.flow li::before{content:counter(step);position:absolute;left:-13px;top:6px;width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center}
+footer{margin-top:60px;color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padding-top:16px}
+@media print{.wrap{padding:0}pre{white-space:pre-wrap}section.part{break-before:page}}
+@media (max-width:760px){.diagram{grid-template-columns:1fr}.dg-row{flex-direction:column}.dg-arrow{display:none}}
+</style></head>
+<body><div class="wrap">
+<header class="hero">
+  <h1>Berth — Design and Architecture</h1>
+  <p>A control plane for container groups across Docker hosts (EC2 / VPS) and ECS: discover what runs, group it, give the group one port, manage env and secrets, wire the apps together.</p>
+  <div class="badges"><span class="badge status ok">Status: Accepted · 21 Oct 2026</span><span class="badge">v0.2</span><span class="badge">Spec-driven · contract-first · ADRs</span></div>
+</header>
+<div class="callout">
+  <h3>Approved 21 Oct 2026</h3>
+  <ol>
+    <li><b>ECS runtime:</b> EC2 launch type with bridge networking — Berth allocates host ports on ECS exactly as on Docker hosts.</li>
+    <li><b>Hosting:</b> Berth runs as a Replit deployment and reaches hosts over SSH; no agent on hosts.</li>
+    <li><b>Still open</b> (end of the Spec): ALB scope, Service Connect vs existing Cloud Map, auth, secret reveal, scale — proceeding on the stated defaults.</li>
+  </ol>
+</div>
+<nav class="toc"><a href="#part-map">1 · Capability map</a><a href="#part-spec">2 · Spec</a><a href="#part-arch">3 · Architecture</a><a href="#part-adrs">4 · Decisions (ADRs)</a></nav>
+
+<section class="part" id="part-map"><h1>1 · Capability map</h1><p class="lead">Phase 0 of the spec-driven workflow: module boundaries and build order, reviewed before any module spec.</p>
+<p>A self-hosted control plane that discovers containers running on your Docker hosts (EC2 / VPS) and ECS clusters, lets you bundle them into <strong>groups</strong>, takes one port per group and does the port-mapping bookkeeping, manages environment variables and secrets, and wires the apps in a group together.</p>
+<p>Status: <strong>Accepted</strong> 2026-10-21. Revised after the clarification round (ECS added as a second runtime; port model changed to allocation/bookkeeping). ECS runtime is the EC2 launch type.</p>
+<table><thead><tr><th>Module id</th><th>Responsibility</th><th>Depends on</th></tr></thead><tbody><tr><td><code>providers</code></td><td>Register runtimes and reach them: Docker hosts over SSH or TLS, ECS clusters through the AWS SDK. Holds encrypted credentials. One <code>Provider</code> interface, two adapters (<code>docker</code>, <code>ecs</code>).</td><td>—</td></tr><tr><td><code>discovery</code></td><td>Keep a live inventory of <strong>workloads</strong> (Docker containers, ECS tasks) per provider: name, image, status, ports, networks, health. Detect drift against desired state.</td><td><code>providers</code></td></tr><tr><td><code>groups</code></td><td>Named sets of workloads on one provider. You give the group's <strong>entry port</strong>; the tool allocates and tracks every host↔container port mapping, collision-free per host.</td><td><code>discovery</code></td></tr><tr><td><code>config</code></td><td>Environment variables and secrets per group and per member. Manual values encrypted at rest; AWS SSM Parameter Store and Secrets Manager as referenced sources.</td><td><code>groups</code></td></tr><tr><td><code>integration</code></td><td>Per-group private network (Docker user-defined network / ECS Service Connect namespace), service discovery by member name, injected <code>SVC_*</code> env vars, health checks.</td><td><code>groups</code>, <code>config</code></td></tr><tr><td><code>apply</code></td><td>Turn desired state (group + allocations + config + wiring) into provider operations: recreate containers, register task-definition revisions, update services. Idempotent, logged, resumable.</td><td><code>integration</code></td></tr></tbody></table>
+<p>Build order: <code>providers</code> → <code>discovery</code> → <code>groups</code> → <code>config</code> → <code>integration</code> → <code>apply</code></p>
+<p>Notes</p>
+<ul><li>The web console is not a module; it grows a screen per module in the same order.</li><li><code>apply</code> is listed last because it is the only module that mutates the runtime. Everything before it is read-only against your hosts, which keeps the first four modules safe to ship and test against real infrastructure.</li><li>A group lives on <strong>one</strong> provider in v1. Cross-provider groups (a container on EC2 talking to a Fargate task) are out of scope; see Open Questions in <code>SPEC.md</code>.</li><li>Contracts between modules live in the provider module's spec, following <code>api-and-interface-design</code>. The public HTTP API is specified in <code>docs/architecture.md</code>.</li></ul>
+</section>
+
+<section class="part" id="part-spec"><h1>2 · Spec</h1><p class="lead">What we are building, why, how we will know it is done, and the rules of engagement.</p>
+<p>Status: <strong>Accepted</strong> — approved 2026-10-21. Decisions taken at approval: ECS uses the <strong>EC2 launch type</strong>; the control plane runs as a <strong>Replit deployment</strong> reaching hosts over SSH. Open questions 1 and 4 are resolved below; the rest proceed on the stated defaults until answered. Companion documents: <code>CAPABILITY-MAP.md</code> (module boundaries and build order), <code>docs/architecture.md</code> (system design and API contract), <code>docs/decisions/</code> (ADRs).</p>
+<h2 id="objective">Objective</h2>
+<p>Berth is an internal tool for one operator or a small team who run applications as containers on a mix of Docker hosts (EC2 instances, VPSs) and ECS clusters, and who currently manage port mappings, environment variables, and app-to-app wiring by hand.</p>
+<p>It does five things:</p>
+<ol><li><strong>Sees what is running.</strong> Connect a Docker host or an ECS cluster; Berth lists every container or task with image, status, ports, and networks, and keeps that list current.</li><li><strong>Groups them.</strong> Pick workloads on one host or cluster and name the set (for example <code>shop</code>: <code>web</code>, <code>api</code>, <code>db</code>).</li><li><strong>Takes one port and does the bookkeeping.</strong> You give the group an entry port (say <code>8080</code>). The entry member gets it. Internal members get no host port at all. Members you mark as exposed get a free port allocated from a per-host range. Berth tracks every allocation and refuses collisions, so you never edit a port mapping by hand again.</li><li><strong>Manages env vars and secrets.</strong> Set values per group or per member; keep them encrypted; or reference AWS SSM Parameter Store and Secrets Manager entries. Changes are applied to the running workloads.</li><li><strong>Wires the apps together.</strong> Members of a group share a private network and find each other by name; each member receives the others' addresses as <code>SVC_&lt;NAME&gt;_HOST</code>, <code>SVC_&lt;NAME&gt;_PORT</code>, and <code>SVC_&lt;NAME&gt;_URL</code>, so nothing is hardcoded.</li></ol>
+<p>User stories</p>
+<ul><li>As the operator, I register an EC2 host over SSH and an ECS cluster with an IAM role, and within 30 seconds I see both inventories in one screen.</li><li>As the operator, I create group <code>shop</code> with port <code>8080</code>, add three containers, mark <code>web</code> as the entry, click Apply, and <code>curl http://&lt;host&gt;:8080</code> reaches <code>web</code>; <code>api</code> and <code>db</code> are reachable only from inside the group.</li><li>As the operator, I change <code>DATABASE_URL</code> on <code>api</code>, click Apply, and only <code>api</code> is recreated with the new value; the value never appears in logs or in any API response.</li><li>As the operator, I try to give a second group port <code>8080</code> on the same host and get a clear <code>PORT_IN_USE</code> error before anything touches the host.</li><li>As the operator, when somebody stops a container with <code>docker stop</code> outside Berth, the group shows as drifted within a minute.</li></ul>
+<p>Non-goals for v1</p>
+<ul><li>Deploying new images (pull and run). Berth manages what is already deployed. Deploy is the first candidate for v2.</li><li>Kubernetes / EKS, multi-tenant accounts, role-based access control.</li><li>Load balancer management (ALB listeners and target groups). On ECS, Berth records the entry port and opens the security-group rule; public routing through a load balancer stays manual in v1.</li><li>Cross-provider groups. A group lives on one Docker host or one ECS cluster.</li><li>Metrics and log streaming.</li></ul>
+<h2 id="tech-stack">Tech Stack</h2>
+<ul><li><strong>Language:</strong> TypeScript end to end (one type system for the API contract, the console, and the adapters).</li><li><strong>Console:</strong> React 18 + Vite, TanStack Query, Tailwind. Served by the API process in production.</li><li><strong>Control plane:</strong> Node.js 20+, Express, Zod for boundary validation, <code>pino</code> logging with secret redaction.</li><li><strong>State:</strong> PostgreSQL via Drizzle ORM and <code>drizzle-kit</code> migrations. Operations and jobs are rows in Postgres; no Redis in v1.</li><li><strong>Docker adapter:</strong> <code>dockerode</code> over SSH (<code>ssh2</code>) or TCP with mutual TLS. Never plain TCP.</li><li><strong>AWS adapter:</strong> AWS SDK v3 — <code>@aws-sdk/client-ecs</code>, <code>client-ec2</code>, <code>client-servicediscovery</code>, <code>client-ssm</code>, <code>client-secrets-manager</code>, <code>client-sts</code>.</li><li><strong>Crypto:</strong> Node <code>crypto</code> AES-256-GCM for credentials and secret values at rest; master key from the <code>BERTH_MASTER_KEY</code> secret.</li><li><strong>Tests:</strong> Vitest; Supertest for HTTP; fake provider adapters for unit and integration tests.</li><li><strong>Hosting (decided):</strong> runs as a Replit deployment (web service + Postgres). It reaches Docker hosts outbound over SSH and AWS over the SDK, so no agent is installed on your hosts. Hosts must accept SSH from the internet (or through a bastion) for this to work. A Docker image for self-hosting inside a VPC remains a v2 option.</li></ul>
+<h2 id="commands">Commands</h2>
+<pre><code class="lang-">Dev:        npm run dev                 # API on :5000 with Vite middleware for the console
+Build:      npm run build               # client → dist/public, server → dist/index.js
+Test:       npm test                    # vitest run
+Test watch: npm run test:watch
+Coverage:   npm test -- --coverage
+Lint:       npm run lint                # eslint . --max-warnings 0
+Typecheck:  npm run check               # tsc --noEmit
+DB:         npm run db:push             # apply Drizzle schema to the dev database
+            npm run db:generate         # generate a migration from schema changes
+Start:      npm start                   # node dist/index.js</code></pre>
+<h2 id="project-structure">Project Structure</h2>
+<pre><code class="lang-">client/                      React console (Vite)
+  src/pages/                 one page per module: providers, workloads, groups, config, operations
+  src/components/
+  src/lib/api.ts             typed client generated from shared/contracts
+server/
+  index.ts                   process entry: HTTP server + job runner
+  routes/                    one router per resource; validation at the boundary only
+  services/                  use cases: groups, allocation, config, wiring, apply planner
+  providers/
+    provider.ts              the Provider interface (contract between core and adapters)
+    docker/                  dockerode adapter: discovery, network, recreate
+    ecs/                     AWS SDK adapter: discovery, task definitions, services, Service Connect
+    fake/                    in-memory adapter used by tests
+  jobs/                      operation runner, discovery poller, drift detector
+  crypto/                    envelope encryption, redaction helpers
+  db/                        Drizzle client
+shared/
+  schema.ts                  Drizzle tables + relations
+  contracts/                 Zod schemas and TS types for every request and response (the API contract)
+tests/
+  unit/                      allocator, env renderer, apply planner, crypto
+  integration/               HTTP API against a real Postgres with the fake provider
+docs/
+  architecture.md            system design and API contract
+  decisions/                 ADR-001 …
+tasks/                       plan.md and todo.md (created in the Plan phase)
+CAPABILITY-MAP.md
+SPEC.md</code></pre>
+<h2 id="code-style">Code Style</h2>
+<pre><code class="lang-ts">// server/services/allocation.ts
+import { and, eq, ne } from "drizzle-orm";
+import { db } from "../db";
+import { portAllocations } from "@shared/schema";
+import { ConflictError } from "../errors";
+
+export type AllocationRequest = {
+  providerId: string;
+  groupId: string;
+  memberId: string;
+  hostPort: number;
+  protocol: "TCP" | "UDP";
+};
+
+/**
+ * Claims a host port for a group member.
+ *
+ * The claim is a single INSERT guarded by the partial unique index
+ * (providerId, hostPort, protocol) WHERE state &lt;&gt; 'RELEASED'. We do not
+ * SELECT first: two concurrent applies would both see "free" and both insert.
+ * The index picks the winner; the loser gets ConflictError(PORT_IN_USE).
+ */
+export async function claimPort(req: AllocationRequest) {
+  try {
+    const [row] = await db
+      .insert(portAllocations)
+      .values({ ...req, state: "RESERVED" })
+      .returning();
+    return row;
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw new ConflictError("PORT_IN_USE", `Port ${req.hostPort}/${req.protocol} is already allocated on this host`);
+    }
+    throw err;
+  }
+}</code></pre>
+<p>Conventions</p>
+<ul><li><code>camelCase</code> for variables, fields, and query params; <code>PascalCase</code> for types; <code>UPPER_SNAKE</code> for enum values and error codes; <code>kebab-case</code> for files and module ids.</li><li>Validate with Zod in route handlers only; services receive typed, trusted input.</li><li>Errors are thrown as typed classes (<code>NotFoundError</code>, <code>ConflictError</code>, <code>ValidationError</code>, <code>ProviderError</code>) and translated to the single HTTP error shape in one middleware.</li><li>No <code>any</code>; <code>unknown</code> plus narrowing at boundaries. No commented-out code; no TODOs that could be done now.</li><li>Comments explain why. Gotchas (for example "containers are immutable: a port or env change requires recreate") are documented where they bite.</li><li>Secret values never reach a log line, an error message, or a response body. The redaction helper is applied at the logger, not at call sites.</li></ul>
+<h2 id="testing-strategy">Testing Strategy</h2>
+<table><thead><tr><th>Level</th><th>Tool</th><th>What it covers</th><th>Where</th></tr></thead><tbody><tr><td>Unit</td><td>Vitest</td><td>Port allocator, env renderer (<code>SVC_*</code> injection, merge rules), apply planner (desired vs observed → steps), crypto, redaction</td><td><code>tests/unit</code></td></tr><tr><td>Integration</td><td>Vitest + Supertest + Postgres</td><td>Every endpoint in <code>shared/contracts</code>: validation, error shape, pagination, idempotency replay, 409 on port collision</td><td><code>tests/integration</code></td></tr><tr><td>Adapter contract</td><td>Vitest, same suite run against <code>fake</code>, <code>docker</code>, and <code>ecs</code></td><td>The Provider interface behaves identically across adapters</td><td><code>tests/adapters</code></td></tr><tr><td>Manual acceptance</td><td>Checklist in <code>docs/acceptance.md</code></td><td>Success criteria below against a real EC2 host and a real ECS service</td><td>before each release</td></tr></tbody></table>
+<p>Coverage targets: 90% lines on <code>server/services/allocation.ts</code>, <code>server/services/env.ts</code>, <code>server/services/apply-planner.ts</code>, <code>server/crypto/</code>; 70% overall. Adapter tests against a real Docker daemon or ECS cluster are opt-in (<code>BERTH_TEST_DOCKER_HOST</code>, <code>BERTH_TEST_ECS_CLUSTER</code>) and never run in CI by default.</p>
+<h2 id="boundaries">Boundaries</h2>
+<p>Always</p>
+<ul><li>Validate at the API boundary with the Zod schemas in <code>shared/contracts</code>; keep the contract and implementation in the same commit.</li><li>Encrypt credentials and secret values before they reach Postgres; mask them in every response (<code>valuePresent: true</code>, never the value).</li><li>Run every runtime mutation as an <code>Operation</code> with an idempotency key and a step log; record intent before calling out.</li><li>Run <code>npm run check &amp;&amp; npm test</code> before each commit; keep new API fields optional and additive.</li><li>Write or update an ADR when choosing a dependency, changing the data model, or changing provider semantics.</li></ul>
+<p>Ask first</p>
+<ul><li>Adding a dependency; adding Redis or any second datastore.</li><li>Schema changes after the first migration ships.</li><li>Any operation against an ECS service whose cluster is tagged <code>env=prod</code>, until the operator has run at least one successful apply on a non-prod cluster.</li><li>Load balancer, DNS, or IAM policy changes beyond the documented least-privilege policy.</li><li>Changing the <code>SVC_*</code> injection prefix or env merge rules (consumers will depend on them — Hyrum's Law).</li></ul>
+<p>Never</p>
+<ul><li>Commit secrets, keys, or <code>.env</code> files; log a secret value; return a secret value from the API.</li><li>Touch a container or task that is not a member of a group (no <code>docker rm -f</code> on unmanaged workloads).</li><li>Expose a Docker daemon over plain TCP, or store a Docker socket path that is not the control plane's own.</li><li>Remove a failing test or lower a coverage threshold to make a build pass.</li><li>Hard-delete an <code>Operation</code> or an ADR.</li></ul>
+<h2 id="success-criteria">Success Criteria</h2>
+<ol><li><strong>Discovery.</strong> After registering a Docker host (SSH) and an ECS cluster, <code>GET /api/workloads</code> lists every running container and task with image, status, and ports within 30 s, and reflects a container stopped outside Berth as <code>MISSING</code> within 60 s.</li><li><strong>Group + port.</strong> Creating group <code>shop</code> (entry port 8080) on a Docker host with members <code>web</code> (ENTRY, container port 3000), <code>api</code> (INTERNAL, 4000), <code>db</code> (INTERNAL, 5432), then applying, results in: <code>curl http://&lt;host&gt;:8080</code> served by <code>web</code>; <code>api</code> and <code>db</code> with no host port bindings; all three attached to network <code>berth-shop</code>; <code>api</code> with <code>SVC_DB_HOST=db</code>, <code>SVC_DB_PORT=5432</code>, <code>SVC_WEB_URL=http://web:3000</code> in its environment.</li><li><strong>Collision safety.</strong> A second group requesting entry port 8080 on the same host receives <code>409 { error: { code: "PORT_IN_USE" } }</code> before any provider call; the partial unique index on <code>(providerId, hostPort, protocol)</code> enforces this under concurrency (tested with 20 parallel requests, exactly one wins).</li><li><strong>Config.</strong> Setting secret <code>API_KEY</code> on <code>api</code> and applying recreates only <code>api</code>; the value is absent from logs and from <code>GET /api/groups/:id/members/:memberId/config</code> (<code>valuePresent: true</code>).</li><li><strong>ECS (EC2 launch type, bridge networking).</strong> Applying a group on an ECS service registers a new task-definition revision with the environment, <code>secrets</code> (SSM / Secrets Manager ARNs passed through), port mappings whose host ports come from Berth's allocations, and Service Connect configuration, updates the service, and waits for it to be stable; the entry port has an ingress rule on the container instance security group.</li><li><strong>Idempotency.</strong> Re-sending <code>POST /api/groups/:id/applies</code> with the same <code>Idempotency-Key</code> returns the original operation (<code>200</code>, same <code>id</code>) and performs no second recreate; the same key with a different body returns <code>422 IDEMPOTENCY_KEY_REUSED</code>.</li><li><strong>Rollback.</strong> If a recreated container fails its health check, Berth restarts the previous container and marks the operation <code>FAILED</code> with the step that failed; no member is left stopped.</li><li><strong>Quality gates.</strong> <code>npm run check</code>, <code>npm run lint</code>, and <code>npm test</code> pass; coverage targets above are met; every endpoint in <code>shared/contracts</code> has an integration test.</li></ol>
+<h2 id="open-questions">Open Questions</h2>
+<ol><li><s><strong>ECS launch type.</strong></s> <strong>Resolved: EC2 launch type.</strong> With bridge networking Berth allocates host ports on ECS exactly as on Docker hosts. Task definitions that use <code>awsvpc</code> are still supported in validate-and-record mode (<code>canChooseHostPort = false</code>). Fargate is not targeted.</li><li><strong>Public reachability on ECS.</strong> With no load balancer management in v1, the entry port is reachable on the container instance's address (bridge mode maps it onto the EC2 host) or through whatever ALB you already have. Default until answered: ALB target-group registration stays out of v1.</li><li><strong>Service Connect.</strong> Per-group wiring on ECS uses ECS Service Connect with a Cloud Map namespace per group (supported with bridge networking on the EC2 launch type). If you already use Cloud Map or App Mesh, Berth should match it instead. Default until answered: Service Connect.</li><li><s><strong>Where the control plane runs.</strong></s> <strong>Resolved: Replit deployment.</strong> Berth reaches Docker hosts over SSH and AWS over the SDK from Replit. Each registered host needs inbound SSH from Berth's egress (a bastion or an allow-list on port 22).</li><li><strong>Auth.</strong> v1 proposes a single admin login (username + password, session cookie). Default until answered: single admin.</li><li><strong>Secret reveal.</strong> v1 never shows a stored secret value again after it is saved. Default until answered: no reveal action.</li><li><strong>Scale.</strong> Roughly how many hosts, clusters, and containers? The 30 s polling design is comfortable up to a few hundred workloads. Default until answered: polling plus Docker events.</li></ol>
+</section>
+
+<section class="part" id="part-arch"><h1>3 · Architecture</h1><p class="lead">System shape, domain model, the provider contract, port and config models, apply flow, HTTP API, security, failure modes.</p>
+<p>Status: <strong>Accepted</strong>, v0.2 (2026-10-21). Decisions applied: ECS EC2 launch type with bridge networking; control plane hosted as a Replit deployment. Pairs with <code>SPEC.md</code> (what and why), <code>CAPABILITY-MAP.md</code> (modules and build order), and <code>docs/decisions/</code> (the reasoning behind each choice below).</p>
+<h2 id="1-system-overview">1. System overview</h2>
+<p>Berth is a single control-plane service with a web console, backed by Postgres. It holds <strong>desired state</strong> (groups, port allocations, config, wiring) and continuously observes <strong>actual state</strong> on two kinds of runtime through two adapters behind one interface. It never installs an agent on your hosts: Docker hosts are reached outbound over SSH (or mutual TLS), ECS through the AWS SDK.</p>
+
+<div class="diagram">
+  <div class="dg-cp">
+    <div class="dg-title">Berth control plane · one deployment</div>
+    <div class="dg-row">
+      <div class="dg-box">Web console<small>React · Vite</small></div><span class="dg-arrow">→</span>
+      <div class="dg-box">HTTP API<small>Express · Zod at the boundary</small></div><span class="dg-arrow">→</span>
+      <div class="dg-box">Services<small>groups · allocation · config · wiring · apply planner</small></div>
+    </div>
+    <div class="dg-row">
+      <div class="dg-box dg-db">Postgres<small>desired + observed state · operations · encrypted credentials</small></div>
+      <div class="dg-box">Job runner<small>discovery poller · drift detector · operation executor</small></div><span class="dg-arrow">→</span>
+      <div class="dg-box dg-iface">Provider interface<small>docker · ecs · fake</small></div>
+    </div>
+  </div>
+  <div class="dg-targets">
+    <div class="dg-target"><span class="dg-proto">dockerode over SSH / mTLS</span><div class="dg-box dg-ext">Docker hosts<small>EC2 · VPS</small></div></div>
+    <div class="dg-target"><span class="dg-proto">AWS SDK v3</span><div class="dg-box dg-ext">ECS clusters<small>EC2 launch type · bridge networking</small></div></div>
+    <div class="dg-target"><span class="dg-proto">AWS SDK v3</span><div class="dg-box dg-ext">AWS services<small>SSM · Secrets Manager · EC2 security groups · Cloud Map</small></div></div>
+  </div>
+</div>
+<p>Design rules that fall out of this shape:</p>
+<ul><li><strong>Read before write, by construction.</strong> Modules <code>providers</code>, <code>discovery</code>, <code>groups</code>, <code>config</code>, and <code>integration</code> only read from runtimes or write to Postgres. Only <code>apply</code> mutates a runtime, and it does so through a logged, idempotent <code>Operation</code>.</li><li><strong>One model, two runtimes.</strong> The core never sees a Docker container or an ECS task; it sees a <code>Workload</code>. Runtime differences are absorbed by the adapters and declared through <code>ProviderCapabilities</code> so the UI can grey out what a runtime cannot do (for example choosing a host port on Fargate).</li><li><strong>Desired state is the source of truth, observed state is evidence.</strong> A group is "applied" when the planner finds no diff between the two. Anything else is <code>DRIFTED</code>, which is a state to show, not an error to hide.</li></ul>
+<h2 id="2-domain-model">2. Domain model</h2>
+<details class="src"><summary>Diagram source (Mermaid — renders on GitHub)</summary><pre><code>erDiagram
+  PROVIDER ||--o{ WORKLOAD : observes
+  PROVIDER ||--o{ GROUP : hosts
+  GROUP ||--o{ GROUP_MEMBER : has
+  WORKLOAD ||--o| GROUP_MEMBER : "is at most one"
+  GROUP ||--o{ PORT_ALLOCATION : owns
+  GROUP_MEMBER ||--o{ PORT_ALLOCATION : binds
+  GROUP ||--o{ CONFIG_ENTRY : "scope=GROUP"
+  GROUP_MEMBER ||--o{ CONFIG_ENTRY : "scope=MEMBER"
+  GROUP ||--o{ OPERATION : "applied by"
+  PROVIDER ||--|| CREDENTIAL : uses</code></pre></details>
+<table><thead><tr><th>Entity</th><th>Key fields</th><th>Notes</th></tr></thead><tbody><tr><td><code>Provider</code></td><td><code>kind: DOCKER_HOST | ECS_CLUSTER</code>, <code>name</code>, <code>status: ONLINE | OFFLINE | DEGRADED</code>, <code>lastSeenAt</code>, <code>capabilities</code>, kind-specific <code>settings</code></td><td>Docker: <code>transport: SSH | TCP_TLS</code>, <code>host</code>, <code>port</code>, <code>sshUser</code>. ECS: <code>region</code>, <code>clusterArn</code>, <code>vpcId</code>, <code>launchTypes</code>. Credentials live in <code>Credential</code>, encrypted.</td></tr><tr><td><code>Workload</code></td><td><code>providerId</code>, <code>externalId</code> (container id / task ARN), <code>name</code>, <code>image</code>, <code>status: RUNNING | STOPPED | MISSING | UNKNOWN</code>, <code>ports[]</code>, <code>networks[]</code>, <code>labels</code>, <code>envHash</code>, <code>observedAt</code></td><td>Observed only. <code>envHash</code> is a hash of the environment as seen on the runtime, used for drift; values are never stored.</td></tr><tr><td><code>Group</code></td><td><code>providerId</code>, <code>name</code> (slug), <code>entryPort</code>, <code>protocol</code>, <code>status: DRAFT | APPLYING | APPLIED | DRIFTED | FAILED</code>, <code>networkRef</code></td><td>One provider per group. <code>networkRef</code> is the Docker network name or the Cloud Map namespace id.</td></tr><tr><td><code>GroupMember</code></td><td><code>groupId</code>, <code>workloadId</code>, <code>serviceName</code> (DNS-safe), <code>role: ENTRY | INTERNAL | EXPOSED</code>, <code>containerPort</code>, <code>healthCheck?</code></td><td>Exactly one <code>ENTRY</code> per group. <code>serviceName</code> is what other members use to reach it.</td></tr><tr><td><code>PortAllocation</code></td><td><code>providerId</code>, <code>hostPort</code>, <code>protocol</code>, <code>groupId</code>, <code>memberId</code>, <code>state: RESERVED | APPLIED | RELEASED</code></td><td>Partial unique index on <code>(providerId, hostPort, protocol) WHERE state &lt;&gt; 'RELEASED'</code>. This index <em>is</em> the collision guard.</td></tr><tr><td><code>ConfigEntry</code></td><td><code>scopeType: GROUP | MEMBER</code>, <code>scopeId</code>, <code>key</code>, <code>isSecret</code>, <code>source: MANUAL | AWS_SSM | AWS_SECRETS_MANAGER</code>, <code>valueCiphertext?</code>, <code>sourceRef?</code></td><td>Member entries override group entries with the same key. <code>sourceRef</code> is an SSM parameter name or a Secrets Manager ARN.</td></tr><tr><td><code>Operation</code></td><td><code>groupId</code>, <code>kind: APPLY | ROLLBACK | RELEASE</code>, <code>idempotencyKey</code>, <code>requestHash</code>, <code>state: PENDING | RUNNING | SUCCEEDED | FAILED | UNKNOWN</code>, <code>steps[]</code>, <code>error?</code></td><td>Unique on <code>(groupId, idempotencyKey)</code>. <code>steps[]</code> is the executed plan with per-step status, so a crash mid-apply leaves evidence of what to resolve.</td></tr><tr><td><code>Credential</code></td><td><code>kind: SSH_KEY | TLS_BUNDLE | AWS_KEYS | AWS_ROLE</code>, <code>ciphertext</code>, <code>keyVersion</code></td><td>AES-256-GCM, envelope key from <code>BERTH_MASTER_KEY</code>. Decrypted only inside the adapter that needs it.</td></tr></tbody></table>
+<h2 id="3-the-provider-interface-the-contract-between-core-and-runtimes">3. The Provider interface (the contract between core and runtimes)</h2>
+<p>Defined first; both adapters and the in-memory fake implement it. Core code depends only on this.</p>
+<pre><code class="lang-ts">export interface Provider {
+  readonly kind: "DOCKER_HOST" | "ECS_CLUSTER";
+  capabilities(): ProviderCapabilities;
+  checkConnectivity(): Promise&lt;ConnectivityReport&gt;;
+
+  // discovery (read-only)
+  listWorkloads(): Promise&lt;ObservedWorkload[]&gt;;
+  inspectWorkload(externalId: string): Promise&lt;ObservedWorkloadDetail&gt;;
+  watch?(onEvent: (e: WorkloadEvent) =&gt; void): Promise&lt;Unsubscribe&gt;; // Docker events; ECS polls
+
+  // mutation (apply only)
+  ensureNetwork(group: GroupRef): Promise&lt;NetworkRef&gt;;
+  applyMember(plan: MemberPlan): Promise&lt;MemberResult&gt;;   // recreate container / register task def + update service
+  rollbackMember(plan: MemberPlan, previous: MemberResult): Promise&lt;void&gt;;
+  releaseNetwork(ref: NetworkRef): Promise&lt;void&gt;;
+
+  // secrets (read-only)
+  resolveSecretRef?(ref: SecretRef): Promise&lt;string&gt;;      // SSM / Secrets Manager, used for Docker hosts only
+}
+
+export interface ProviderCapabilities {
+  canChooseHostPort: boolean;        // Docker: true. ECS EC2 launch type, bridge mode: true. awsvpc task definitions (and Fargate): false
+  canRecreateInPlace: boolean;       // Docker: true. ECS: false (new task-definition revision + service update)
+  supportsNativeSecrets: boolean;    // ECS: true (secrets[] with ARNs). Docker: false (values injected at apply)
+  supportsEvents: boolean;           // Docker events stream: true. ECS: false
+  serviceDiscovery: "DOCKER_DNS" | "SERVICE_CONNECT";
+}</code></pre>
+<p>Runtime mapping</p>
+<table><thead><tr><th>Concern</th><th>Docker host adapter</th><th>ECS adapter</th></tr></thead><tbody><tr><td>Workload</td><td>container</td><td>task, grouped under its service</td></tr><tr><td>Transport</td><td><code>dockerode</code> over <code>ssh2</code> tunnel or TCP + mutual TLS</td><td>AWS SDK v3, credentials via IAM keys or <code>AssumeRole</code></td></tr><tr><td>Group network</td><td>user-defined bridge <code>berth-&lt;group&gt;</code>; members attached with alias <code>serviceName</code></td><td>ECS Service Connect with a Cloud Map HTTP namespace <code>berth-&lt;group&gt;</code>; <code>discoveryName = serviceName</code></td></tr><tr><td>Port change</td><td>recreate container with new <code>HostConfig.PortBindings</code></td><td>new task-definition revision with <code>portMappings.hostPort</code> from Berth's allocation (bridge mode); <code>awsvpc</code>: validate <code>hostPort == containerPort</code></td></tr><tr><td>Env change</td><td>recreate container with merged <code>Env</code></td><td>new revision: plain values in <code>environment</code>, refs in <code>secrets[].valueFrom</code></td></tr><tr><td>Entry port ingress</td><td>the host port binding itself</td><td><code>AuthorizeSecurityGroupIngress</code> on the container instance security group (bridge) or the task security group (<code>awsvpc</code>)</td></tr><tr><td>Health after apply</td><td>member <code>healthCheck</code> (TCP/HTTP probe through the SSH tunnel) or container <code>Health</code></td><td><code>waitUntilServicesStable</code> + deployment circuit breaker</td></tr><tr><td>Drift signal</td><td>events + 30 s poll</td><td>30 s poll of <code>DescribeServices</code> / <code>DescribeTasks</code></td></tr></tbody></table>
+<h2 id="4-port-model">4. Port model</h2>
+<p>You give a group one number: its <strong>entry port</strong>. Everything else is derived.</p>
+<table><thead><tr><th>Member role</th><th>Host port</th><th>Who reaches it</th></tr></thead><tbody><tr><td><code>ENTRY</code> (exactly one)</td><td>the group's entry port</td><td>the outside world</td></tr><tr><td><code>INTERNAL</code> (default)</td><td>none</td><td>other members, by <code>serviceName</code> on the group network</td></tr><tr><td><code>EXPOSED</code></td><td>allocated from the host's range (default <code>20000–29999</code>)</td><td>the outside world, on a port Berth chose and recorded</td></tr></tbody></table>
+<p>Allocation rules</p>
+<ol><li>A claim is a single <code>INSERT</code> into <code>port_allocations</code>; the partial unique index decides collisions. There is no check-then-insert.</li><li>Before claiming, the allocator also consults observed state: host ports already bound by <strong>unmanaged</strong> containers on that host are treated as taken, so Berth never fights a container it does not own. These are advisory (they can change under us); the unique index is the guarantee among Berth's own groups.</li><li>On ECS with the EC2 launch type and bridge networking (the operator's setup), the allocator works exactly as on Docker hosts; the per-host range applies per container instance. For <code>awsvpc</code> task definitions <code>canChooseHostPort</code> is false: the entry port must equal the entry member's container port, and the allocator validates and records instead of choosing.</li><li>Allocations move <code>RESERVED → APPLIED</code> when the operation succeeds and <code>→ RELEASED</code> when a member leaves or the group is deleted. Released rows are kept for audit; the partial index ignores them.</li><li>Changing the entry port is an apply like any other: claim the new port first, recreate the entry member, release the old port last. A failed apply releases the new claim.</li></ol>
+<h2 id="5-config-and-secrets">5. Config and secrets</h2>
+<ul><li>Two scopes, one merge rule: <code>MEMBER</code> overrides <code>GROUP</code> by key. Injected <code>SVC_*</code> variables are added last and cannot be overridden (they are the wiring, not config).</li><li><code>MANUAL</code> values are encrypted with AES-256-GCM under a per-row data key wrapped by <code>BERTH_MASTER_KEY</code>. Key rotation re-wraps data keys; it does not re-encrypt values.</li><li><code>AWS_SSM</code> and <code>AWS_SECRETS_MANAGER</code> entries store only the reference. On ECS the reference is passed through natively in <code>secrets[]</code>, so the plaintext never transits Berth. On Docker hosts there is no native equivalent: the adapter resolves the reference at apply time and injects the value into the container's environment. This is a known trade-off, documented as a gotcha in the UI: anyone with <code>docker inspect</code> on that host can read it.</li><li>Responses never carry secret values. A config entry reads as <code>{ key, isSecret: true, valuePresent: true, source, sourceRef?, updatedAt }</code>.</li><li>Redaction is enforced at the logger (<code>pino</code> redact paths plus a value-based scrubber seeded with the current secret set), not at call sites.</li></ul>
+<p>Injected variables, for member <code>api</code> in group <code>shop</code> with members <code>web</code> (3000), <code>api</code> (4000), <code>db</code> (5432):</p>
+<pre><code class="lang-">BERTH_GROUP=shop
+BERTH_SELF=api
+BERTH_SELF_PORT=4000
+SVC_WEB_HOST=web      SVC_WEB_PORT=3000   SVC_WEB_URL=http://web:3000
+SVC_DB_HOST=db        SVC_DB_PORT=5432    SVC_DB_URL=tcp://db:5432</code></pre>
+<p><code>HOST</code> is the member's <code>serviceName</code>, resolvable on the group network by Docker DNS or Service Connect. The prefix and URL scheme per member are configurable at the group level; changing them after first apply is an "ask first" boundary because consumers will depend on them.</p>
+<h2 id="6-apply-from-desired-state-to-runtime-operations">6. Apply: from desired state to runtime operations</h2>
+
+<ol class="flow">
+  <li><b>Operator</b> clicks Apply → <code>POST /api/groups/shop/applies</code> with an <code>Idempotency-Key</code>.</li>
+  <li><b>API</b> inserts the operation; the unique index on <code>(groupId, idempotencyKey)</code> replays an existing one instead of starting a second.</li>
+  <li><b>API</b> claims port allocations in the same transaction; the partial unique index on <code>(providerId, hostPort, protocol)</code> rejects collisions with <code>409 PORT_IN_USE</code>.</li>
+  <li><b>API</b> answers <code>202 { operation: PENDING }</code>. Nothing has touched a host yet.</li>
+  <li><b>Executor</b> loads desired and observed state and computes <code>plan = diff(desired, observed, capabilities)</code> — a pure, unit-tested function.</li>
+  <li><b>Executor → adapter</b>: <code>ensureNetwork(shop)</code> (Docker user-defined network or ECS Service Connect namespace).</li>
+  <li>For each member in order <b>INTERNAL → EXPOSED → ENTRY</b>: write the step as <code>RUNNING</code> <em>before</em> the call, then <code>applyMember(plan)</code>. Success records the result; failure triggers <code>rollbackMember(previous)</code> and marks the operation <code>FAILED</code> at that step; a timeout leaves the step <code>UNKNOWN</code> for discovery to reconcile.</li>
+  <li>On success: allocations → <code>APPLIED</code>, group → <code>APPLIED</code>, operation → <code>SUCCEEDED</code>.</li>
+</ol>
+<p>Planner rules</p>
+<ul><li>The plan is a pure function of <code>(desired, observed, capabilities)</code> and is unit-tested as such. Steps are <code>ENSURE_NETWORK</code>, <code>APPLY_MEMBER</code>, <code>OPEN_INGRESS</code>, <code>RELEASE_PORT</code>, <code>RELEASE_NETWORK</code>.</li><li>Members are applied <code>INTERNAL → EXPOSED → ENTRY</code> so dependencies are up before the public face moves. Each member is one step; a step is retried at most twice on transport errors and never on provider-reported validation errors.</li><li><strong>Docker recreate</strong> (the adapter's <code>applyMember</code>): inspect → create <code>name.berth-next</code> with the same image, command, mounts, restart policy, and labels, plus new <code>Env</code>, <code>PortBindings</code>, and network attachment → stop old → rename old to <code>name.berth-prev</code> → rename new to <code>name</code> → start → health probe → remove prev. On failure: stop new, rename and start prev, remove new. Anonymous volumes are flagged in the UI before apply because recreate cannot carry them.</li><li><strong>ECS apply</strong>: describe service and task definition → register a new revision with updated <code>portMappings</code> (host ports from allocations in bridge mode), <code>environment</code>, <code>secrets</code>, Service Connect configuration → <code>UpdateService</code> → <code>waitUntilServicesStable</code> (bounded). ECS's own deployment circuit breaker performs the rollback; Berth records the outcome. In bridge mode a rolling deployment briefly needs the old and new task on the same instance, so the host port is reserved for the new task only after the old one drains; Berth uses <code>minimumHealthyPercent = 0</code> / <code>maximumPercent = 100</code> for single-instance services and documents this as a gotcha.</li><li>Every call has three outcomes, not two. A timeout leaves the step and the operation in <code>UNKNOWN</code>; the next discovery pass reconciles it to <code>SUCCEEDED</code> or <code>FAILED</code> from observed state. Berth never auto-retries an <code>UNKNOWN</code> mutation.</li></ul>
+<h2 id="7-discovery-and-drift">7. Discovery and drift</h2>
+<ul><li>Docker: on connect, <code>listContainers({ all: true })</code>; then subscribe to the events stream (<code>start</code>, <code>die</code>, <code>destroy</code>, <code>rename</code>, <code>network connect/disconnect</code>) with a 30 s full poll as the safety net.</li><li>ECS: a 30 s poll per cluster: <code>ListServices → DescribeServices → ListTasks → DescribeTasks</code>, with task-definition descriptions cached by ARN.</li><li>Each pass upserts <code>Workload</code> rows and marks anything not seen for two passes as <code>MISSING</code>.</li><li>Drift detector: for each <code>APPLIED</code> group, compare observed ports, network membership, and <code>envHash</code> with desired; any difference sets the group to <code>DRIFTED</code> with a per-member reason. Drift is shown, not auto-corrected; "Re-apply" is one click and one operation.</li></ul>
+<h2 id="8-http-api-contract">8. HTTP API contract</h2>
+<p>Conventions (from <code>api-and-interface-design</code>): plural nouns, no verbs; <code>camelCase</code> fields and query params; <code>UPPER_SNAKE</code> enums; one error shape; every list paginated; additive changes only. Zod schemas in <code>shared/contracts</code> are the contract; the OpenAPI document is generated from them.</p>
+<table><thead><tr><th>Method and path</th><th>Purpose</th><th>Notes</th></tr></thead><tbody><tr><td><code>GET /api/providers</code> · <code>POST /api/providers</code></td><td>list, register</td><td><code>POST</code> runs a connectivity check and returns <code>201</code> with <code>status</code></td></tr><tr><td><code>GET /api/providers/:id</code> · <code>PATCH</code> · <code>DELETE</code></td><td>read, update settings, remove</td><td><code>DELETE</code> is <code>409 PROVIDER_HAS_GROUPS</code> while groups exist</td></tr><tr><td><code>POST /api/providers/:id/connectivity-checks</code></td><td>re-test credentials</td><td>returns the <code>ConnectivityReport</code></td></tr><tr><td><code>GET /api/workloads?providerId=&amp;status=&amp;page=&amp;pageSize=</code></td><td>inventory</td><td>observed state; read-only</td></tr><tr><td><code>GET /api/workloads/:id</code></td><td>detail</td><td>ports, networks, labels, <code>envHash</code>, group membership</td></tr><tr><td><code>GET /api/groups</code> · <code>POST /api/groups</code></td><td>list, create</td><td><code>POST</code> validates entry port availability and returns <code>201</code> in <code>DRAFT</code></td></tr><tr><td><code>GET /api/groups/:id</code> · <code>PATCH</code> · <code>DELETE</code></td><td>read, update entry port or settings, delete</td><td><code>DELETE</code> releases ports and schedules network release</td></tr><tr><td><code>POST /api/groups/:id/members</code> · <code>PATCH /api/groups/:id/members/:memberId</code> · <code>DELETE</code></td><td>manage membership and roles</td><td>a second <code>ENTRY</code> is <code>422 ENTRY_ALREADY_SET</code></td></tr><tr><td><code>GET /api/groups/:id/ports</code></td><td>allocations</td><td>current <code>RESERVED</code> and <code>APPLIED</code> rows</td></tr><tr><td><code>GET /api/groups/:id/config</code> · <code>PATCH /api/groups/:id/config</code></td><td>group-scope entries</td><td><code>PATCH</code> body is a partial map; <code>null</code> deletes a key</td></tr><tr><td><code>GET /api/groups/:id/members/:memberId/config</code> · <code>PATCH</code></td><td>member-scope entries</td><td>same shape; values masked on read</td></tr><tr><td><code>GET /api/groups/:id/plan</code></td><td>dry run</td><td>the steps an apply would execute now</td></tr><tr><td><code>POST /api/groups/:id/applies</code></td><td>apply</td><td>requires <code>Idempotency-Key</code>; <code>202</code> with the operation; replay returns <code>200</code> and the original</td></tr><tr><td><code>GET /api/operations?groupId=&amp;page=&amp;pageSize=</code> · <code>GET /api/operations/:id</code></td><td>history, status</td><td>steps with timestamps and redacted errors</td></tr></tbody></table>
+<p>Error shape and status mapping</p>
+<pre><code class="lang-json">{ "error": { "code": "PORT_IN_USE", "message": "Port 8080/TCP is already allocated on this host", "details": { "groupId": "grp_…" } } }</code></pre>
+<p><code>400</code> malformed · <code>401</code> not authenticated · <code>404</code> not found · <code>409</code> conflict (<code>PORT_IN_USE</code>, <code>OPERATION_IN_PROGRESS</code>, <code>PROVIDER_HAS_GROUPS</code>) · <code>422</code> validation (<code>VALIDATION_ERROR</code>, <code>ENTRY_ALREADY_SET</code>, <code>IDEMPOTENCY_KEY_REUSED</code>, <code>CAPABILITY_NOT_SUPPORTED</code>) · <code>502</code> provider error (<code>PROVIDER_UNREACHABLE</code>, <code>PROVIDER_REJECTED</code>, message sanitised) · <code>500</code> internal, no details.</p>
+<p>Pagination: <code>{ "data": [...], "pagination": { "page": 1, "pageSize": 50, "totalItems": 142, "totalPages": 3 } }</code>, default <code>pageSize</code> 50, max 200.</p>
+<p>Idempotency on <code>applies</code>: the key is claimed by the unique index on <code>(groupId, idempotencyKey)</code> in the same transaction that records the operation. Same key + same <code>requestHash</code> replays the stored response. Same key + different body is <code>422 IDEMPOTENCY_KEY_REUSED</code>. A second apply while one is <code>RUNNING</code> is <code>409 OPERATION_IN_PROGRESS</code>. Keys are retained for 30 days, longer than any retry path Berth has.</p>
+<h2 id="9-security">9. Security</h2>
+<ul><li>Secrets at rest: AES-256-GCM, data keys wrapped by <code>BERTH_MASTER_KEY</code> (32 bytes, provided as a deployment secret, never in the repo).</li><li>Docker transport: SSH with a dedicated key pair generated by Berth and shown once for <code>authorized_keys</code>, or mutual TLS with a client certificate. Plain <code>tcp://</code> is rejected at validation.</li><li>AWS: least-privilege policy shipped in <code>docs/aws-policy.json</code> — <code>ecs:List*</code>, <code>ecs:Describe*</code>, <code>ecs:RegisterTaskDefinition</code>, <code>ecs:UpdateService</code>, <code>ec2:DescribeSecurityGroups</code>, <code>ec2:AuthorizeSecurityGroupIngress</code>, <code>ec2:RevokeSecurityGroupIngress</code>, <code>servicediscovery:*Namespace*</code> and <code>*Service*</code>, <code>ssm:GetParameter(s)</code>, <code>secretsmanager:GetSecretValue</code>, <code>iam:PassRole</code> scoped to task roles, <code>sts:GetCallerIdentity</code>.</li><li>Auth: single admin account, Argon2id password hash, HTTP-only session cookie, CSRF token on mutations. OIDC is a v2 candidate.</li><li>Audit: every <code>Operation</code> and every config change records who, when, and the diff (keys only for secrets).</li><li>Third-party responses (Docker API, AWS) are parsed through Zod before use; unexpected shapes become <code>PROVIDER_REJECTED</code>, never a crash or a trust decision.</li></ul>
+<h2 id="10-failure-modes-and-how-they-are-handled">10. Failure modes and how they are handled</h2>
+<table><thead><tr><th>Failure</th><th>Behaviour</th></tr></thead><tbody><tr><td>Host unreachable during discovery</td><td>provider <code>DEGRADED</code>, workloads keep last observation with stale marker; no mutation attempted</td></tr><tr><td>Recreate succeeds but health probe fails</td><td>rollback to previous container; operation <code>FAILED</code> at that step; group <code>FAILED</code> with reason</td></tr><tr><td>Crash between "step RUNNING" and provider response</td><td>step <code>UNKNOWN</code> on restart; discovery reconciles; operator sees exactly which member to inspect</td></tr><tr><td>Port taken by an unmanaged container between claim and apply</td><td>provider rejects the binding; step fails; claim released; <code>409 PORT_IN_USE</code> surfaced with the offending container</td></tr><tr><td><code>awsvpc</code> service with entry port ≠ container port</td><td>rejected at <code>PATCH /groups/:id</code> with <code>422 CAPABILITY_NOT_SUPPORTED</code> before any apply</td></tr><tr><td>Secret reference cannot be resolved (deleted parameter)</td><td>apply fails at plan time (dry run) for Docker hosts; ECS surfaces it as a task start failure, recorded from service events</td></tr></tbody></table>
+<h2 id="11-risks-and-mitigations">11. Risks and mitigations</h2>
+<ul><li><strong>Downtime per recreate.</strong> Each Docker member restarts once per apply (seconds). Mitigation: order <code>INTERNAL → EXPOSED → ENTRY</code>, apply only members whose desired state changed, show the plan before running it. Blue/green on Docker hosts is a v2 candidate.</li><li><strong>Secrets visible via <code>docker inspect</code> on Docker hosts.</strong> Inherent to Docker environment injection; mitigated by documenting it and by preferring ECS native secrets where available. A file-mount delivery mode is a v2 candidate.</li><li><strong>SSH transport stability.</strong> One pooled connection per host with keepalive and exponential backoff; discovery degrades gracefully, apply refuses to start on a <code>DEGRADED</code> provider.</li><li><strong>Hyrum's Law on <code>SVC_*</code>.</strong> Once apps read these names they are a contract; they are versioned by group setting (<code>injectionVersion: 1</code>) and never changed in place.</li></ul>
+</section>
+
+<section class="part" id="part-adrs"><h1>4 · Decisions (ADRs)</h1><p class="lead">Each expensive-to-reverse choice, with the alternatives rejected and why. Stored in <code>docs/decisions/</code>.</p>
+<article class="adr"><h2 id="adr-001-one-workload-model-over-two-runtimes-docker-engine-api-and-ecs">ADR-001: One Workload model over two runtimes (Docker Engine API and ECS)</h2>
+<h3 id="status">Status</h3>
+<p>Accepted (2026-10-21)</p>
+<h3 id="date">Date</h3>
+<p>2026-10-21</p>
+<h3 id="context">Context</h3>
+<p>The operator runs containers on Docker hosts (EC2 instances and VPSs) and on ECS (EC2 launch type). The two runtimes have different control surfaces: Docker exposes containers and networks through the Engine API on each host; ECS exposes services, tasks, and task definitions through the AWS API, and the control plane has no socket access to ECS container instances. Groups, port bookkeeping, config, and wiring must behave the same from the operator's point of view regardless of where a workload runs.</p>
+<h3 id="decision">Decision</h3>
+<p>Define a single <code>Provider</code> interface and a runtime-neutral <code>Workload</code> model in the core. Ship two adapters, <code>docker</code> (dockerode over SSH or mutual TLS) and <code>ecs</code> (AWS SDK v3), plus an in-memory <code>fake</code> adapter for tests. Runtime differences are declared through <code>ProviderCapabilities</code> (for example <code>canChooseHostPort</code>, <code>supportsNativeSecrets</code>) and consumed by the planner and the UI, rather than special-cased in core code. No agent is installed on hosts; all access is outbound from the control plane.</p>
+<h3 id="alternatives-considered">Alternatives Considered</h3>
+<h4 id="docker-hosts-only">Docker hosts only</h4>
+<ul><li>Pros: one adapter, simpler port model, events stream everywhere</li><li>Cons: leaves the ECS workloads unmanaged, which is half of the operator's estate</li><li>Rejected: does not meet the requirement</li></ul>
+<h4 id="an-agent-on-every-host-kubernetes-style-node-agent">An agent on every host (Kubernetes-style node agent)</h4>
+<ul><li>Pros: local socket access, push-based discovery, no SSH management</li><li>Cons: one more thing to install, upgrade, and secure on every host; impossible on Fargate anyway</li><li>Rejected: operational burden with no benefit for ECS</li></ul>
+<h4 id="embed-or-wrap-portainer">Embed or wrap Portainer</h4>
+<ul><li>Pros: mature Docker management UI exists today</li><li>Cons: no concept of groups with a single entry port, no allocation bookkeeping, ECS support is not a first-class model; the custom semantics would live outside it anyway</li><li>Rejected: the valuable parts of this tool are exactly what Portainer does not model</li></ul>
+<h3 id="consequences">Consequences</h3>
+<ul><li>Core services and the planner are testable against the fake adapter without any infrastructure.</li><li>Each adapter must pass the same contract test suite, which keeps behaviour aligned.</li><li>Capability flags push runtime limits (Fargate port rigidity) to validation time instead of apply time.</li><li>Adding a third runtime later (for example Kubernetes) means one adapter, not a core rewrite.</li></ul></article>
+<article class="adr"><h2 id="adr-002-entry-port-given-by-the-operator-everything-else-allocated-and-recorded">ADR-002: Entry port given by the operator, everything else allocated and recorded</h2>
+<h3 id="status">Status</h3>
+<p>Accepted (2026-10-21)</p>
+<h3 id="date">Date</h3>
+<p>2026-10-21</p>
+<h3 id="context">Context</h3>
+<p>The operator wants to "just give a port" and never edit host↔container port mappings by hand. A group typically has one public-facing member and several members that only talk to each other. Port collisions on a shared host are the common failure today. The operator's ECS services use the EC2 launch type with bridge networking, where host ports are chosen in the task definition; <code>awsvpc</code> task definitions do not allow choosing a host port (host port equals container port).</p>
+<h3 id="decision">Decision</h3>
+<p>A group has exactly one <code>ENTRY</code> member that receives the operator-supplied entry port. Members default to <code>INTERNAL</code> and get no host port at all; they are reached over the group network by name. Members marked <code>EXPOSED</code> get a host port allocated from a per-host range (default 20000–29999). Every allocation is a row in <code>port_allocations</code> with a partial unique index on <code>(providerId, hostPort, protocol) WHERE state &lt;&gt; 'RELEASED'</code>; a claim is a single INSERT and the index decides collisions. Observed ports of unmanaged containers are treated as taken when allocating. On runtimes where <code>canChooseHostPort</code> is false, the allocator validates and records instead of choosing.</p>
+<h3 id="alternatives-considered">Alternatives Considered</h3>
+<h4 id="one-reverse-proxy-on-the-given-port-routing-to-members">One reverse proxy on the given port, routing to members</h4>
+<ul><li>Pros: a single public port for the whole group, path or host based routing, TLS termination in one place</li><li>Cons: adds a proxy container per group that Berth must also manage; changes how apps see client IPs and headers; the operator explicitly chose bookkeeping over a proxy in the clarification round</li><li>Rejected: not what was asked for; can be added later as an optional group feature</li></ul>
+<h4 id="operator-chooses-every-host-port-manually-berth-only-validates">Operator chooses every host port manually, Berth only validates</h4>
+<ul><li>Pros: trivial to implement</li><li>Cons: this is the current pain; collisions still happen at the moment of choice</li><li>Rejected: fails the objective</li></ul>
+<h4 id="check-then-insert-allocation-in-application-code">Check-then-insert allocation in application code</h4>
+<ul><li>Pros: readable</li><li>Cons: two concurrent applies both read "free" and both proceed; the race is exactly the collision we are trying to prevent</li><li>Rejected: the unique index is the correct mechanism</li></ul>
+<h3 id="consequences">Consequences</h3>
+<ul><li>Most members need no host port, which reduces the host's exposed surface compared with today.</li><li>The allocator is a small pure core with one SQL guarantee, easy to test under concurrency.</li><li>Groups on <code>awsvpc</code> task definitions are more constrained; the UI must explain why a port field is read-only there.</li><li>Released allocations are kept for audit; cleanup is a retention job, not a delete on release.</li></ul></article>
+<article class="adr"><h2 id="adr-003-encrypted-config-in-postgres-aws-ssm-and-secrets-manager-as-referenced-sources">ADR-003: Encrypted config in Postgres, AWS SSM and Secrets Manager as referenced sources</h2>
+<h3 id="status">Status</h3>
+<p>Accepted (2026-10-21)</p>
+<h3 id="date">Date</h3>
+<p>2026-10-21</p>
+<h3 id="context">Context</h3>
+<p>Environment variables and secrets are currently scattered across env files on hosts and task definitions in AWS. The operator wants one place to manage them for Docker hosts and ECS alike. ECS supports secrets natively (<code>secrets[].valueFrom</code> with SSM or Secrets Manager ARNs); Docker containers only receive plain environment variables.</p>
+<h3 id="decision">Decision</h3>
+<p>Store config entries per group and per member in Postgres. <code>MANUAL</code> values are encrypted with AES-256-GCM using per-row data keys wrapped by a master key held as a deployment secret. <code>AWS_SSM</code> and <code>AWS_SECRETS_MANAGER</code> entries store only the reference. On ECS the reference is passed through natively so the plaintext never transits Berth. On Docker hosts the adapter resolves the reference at apply time and injects the value into the container environment. Secret values are never returned by the API or written to logs; redaction is enforced in the logger.</p>
+<h3 id="alternatives-considered">Alternatives Considered</h3>
+<h4 id="hashicorp-vault-or-another-dedicated-secret-store">HashiCorp Vault (or another dedicated secret store)</h4>
+<ul><li>Pros: strong audit, dynamic secrets, leasing</li><li>Cons: a second system to run and secure; the operator is already on AWS, which provides SSM and Secrets Manager</li><li>Rejected: operational weight for a small team; AWS stores cover the need</li></ul>
+<h4 id="env-files-managed-on-each-host">Env files managed on each host</h4>
+<ul><li>Pros: no encryption in Berth</li><li>Cons: sprawl across hosts, no audit, nothing comparable for ECS</li><li>Rejected: reproduces the current problem</li></ul>
+<h4 id="plaintext-in-postgres-with-database-level-encryption-only">Plaintext in Postgres with database-level encryption only</h4>
+<ul><li>Pros: simplest code</li><li>Cons: any read access to the database or a backup exposes every secret</li><li>Rejected: unacceptable blast radius</li></ul>
+<h3 id="consequences">Consequences</h3>
+<ul><li>Key rotation re-wraps data keys without re-encrypting values.</li><li>Docker-host injection makes values visible to anyone with <code>docker inspect</code> on that host; this is documented in the UI as a gotcha and is the reason ECS native secrets are preferred when available.</li><li>The least-privilege AWS policy must include <code>ssm:GetParameter(s)</code> and <code>secretsmanager:GetSecretValue</code> for Docker-host resolution, and <code>iam:PassRole</code> for ECS task execution roles that read secrets.</li></ul></article>
+<article class="adr"><h2 id="adr-004-per-group-private-network-plus-injected-svc-variables">ADR-004: Per-group private network plus injected SVC_* variables</h2>
+<h3 id="status">Status</h3>
+<p>Accepted (2026-10-21)</p>
+<h3 id="date">Date</h3>
+<p>2026-10-21</p>
+<h3 id="context">Context</h3>
+<p>Apps in a group need to reach each other without hardcoded addresses. Docker provides DNS by container name or alias on user-defined networks; ECS provides Service Connect (backed by Cloud Map) for the same purpose. Apps are existing containers that cannot be modified, so wiring must arrive through configuration they already read: environment variables.</p>
+<h3 id="decision">Decision</h3>
+<p>Each group gets a private network: a user-defined bridge network <code>berth-&lt;group&gt;</code> on Docker hosts, or an ECS Service Connect namespace <code>berth-&lt;group&gt;</code> on ECS. Members are reachable by their <code>serviceName</code>. On apply, every member receives <code>SVC_&lt;NAME&gt;_HOST</code>, <code>SVC_&lt;NAME&gt;_PORT</code>, and <code>SVC_&lt;NAME&gt;_URL</code> for each other member, plus <code>BERTH_GROUP</code>, <code>BERTH_SELF</code>, and <code>BERTH_SELF_PORT</code>. Injected variables are added after config merge and cannot be overridden. The naming scheme is versioned per group (<code>injectionVersion</code>) and never changed in place.</p>
+<h3 id="alternatives-considered">Alternatives Considered</h3>
+<h4 id="consul-or-another-service-registry">Consul or another service registry</h4>
+<ul><li>Pros: health-aware discovery, works across hosts</li><li>Cons: another system to run; apps would need a client or a sidecar; cross-host groups are out of scope in v1</li><li>Rejected: heavier than the problem</li></ul>
+<h4 id="sidecar-proxy-per-member-service-mesh-style">Sidecar proxy per member (service mesh style)</h4>
+<ul><li>Pros: retries, mTLS, observability for free</li><li>Cons: doubles the container count, needs per-runtime mesh setup, significant operational knowledge</li><li>Rejected for v1: revisit if cross-host groups become a requirement</li></ul>
+<h4 id="hardcoded-addresses-written-by-the-operator">Hardcoded addresses written by the operator</h4>
+<ul><li>Pros: nothing to build</li><li>Cons: this is the manual glue the tool exists to remove</li><li>Rejected</li></ul>
+<h3 id="consequences">Consequences</h3>
+<ul><li>Internal members need no host ports at all (see ADR-002).</li><li>Once apps read <code>SVC_*</code> names they are a public contract under Hyrum's Law; changes require a new injection version and an explicit migration.</li><li>ECS Service Connect requires a Cloud Map namespace and the <code>servicediscovery</code> permissions in the AWS policy; all members of an ECS group must be in the same cluster and VPC. Service Connect supports bridge and <code>awsvpc</code> network modes on the EC2 launch type, not <code>host</code> mode.</li></ul></article>
+<article class="adr"><h2 id="adr-005-typescript-end-to-end-express-postgres-single-deployable-no-redis">ADR-005: TypeScript end to end, Express + Postgres, single deployable, no Redis</h2>
+<h3 id="status">Status</h3>
+<p>Accepted (2026-10-21)</p>
+<h3 id="date">Date</h3>
+<p>2026-10-21</p>
+<h3 id="context">Context</h3>
+<p>The tool has a web console, an HTTP API, background discovery, and a job runner that performs long-running applies. The team is small; operational simplicity matters more than peak throughput. The control plane needs good client libraries for the Docker Engine API and for AWS.</p>
+<h3 id="decision">Decision</h3>
+<p>Build everything in TypeScript: React + Vite console, Express API with Zod validation, Drizzle ORM on PostgreSQL, <code>dockerode</code> for Docker, AWS SDK v3 for ECS and related services. Ship as one process that serves the console, the API, and the job runner, with operations and jobs persisted in Postgres (no Redis, no external queue). Run it as a Replit deployment (decided at approval), reaching Docker hosts outbound over SSH and AWS over the SDK. A Docker image for self-hosting inside a VPC is a v2 option, not part of v1.</p>
+<h3 id="alternatives-considered">Alternatives Considered</h3>
+<h4 id="go">Go</h4>
+<ul><li>Pros: native fit for Docker tooling (the Docker client is Go), single static binary, strong concurrency</li><li>Cons: two languages once the React console exists; contract types would be duplicated or generated; slower iteration for a solo operator</li><li>Rejected: shared Zod contracts across API and console are worth more here than Go's runtime advantages</li></ul>
+<h4 id="python-fastapi">Python (FastAPI)</h4>
+<ul><li>Pros: fast to write, good AWS SDK</li><li>Cons: weaker Docker client ecosystem for streaming events, two languages with the console</li><li>Rejected for the same reason as Go</li></ul>
+<h4 id="separate-worker-process-with-redis-backed-queue-bullmq">Separate worker process with Redis-backed queue (BullMQ)</h4>
+<ul><li>Pros: isolation of long-running applies, horizontal scaling</li><li>Cons: a second datastore to run and secure; the expected load (tens of hosts, hundreds of workloads) does not need it</li><li>Rejected for v1: the job table design allows extracting a worker later without changing semantics</li></ul>
+<h3 id="consequences">Consequences</h3>
+<ul><li>One <code>npm run dev</code> runs the whole system; tests use the fake provider and a real Postgres.</li><li>Long applies run inside the API process; the operation table makes them resumable after a restart.</li><li>Hosts must accept SSH from Berth's egress; hosts in private subnets need a bastion. If that becomes a blocker, the self-hosted image moves into scope.</li></ul></article>
+<article class="adr"><h2 id="adr-006-apply-is-a-planned-idempotent-reconcile-with-recorded-intent">ADR-006: Apply is a planned, idempotent reconcile with recorded intent</h2>
+<h3 id="status">Status</h3>
+<p>Accepted (2026-10-21)</p>
+<h3 id="date">Date</h3>
+<p>2026-10-21</p>
+<h3 id="context">Context</h3>
+<p>Changing a port or an environment variable on a running container requires recreating it; on ECS it requires a new task-definition revision and a service update. These are multi-step, non-atomic operations against remote systems that can time out. Retries from the UI or from a flaky network must not recreate a container twice or leave a member stopped with no record of why.</p>
+<h3 id="decision">Decision</h3>
+<p>Model every mutation as an <code>Operation</code> with an operator-supplied <code>Idempotency-Key</code>, claimed by a unique index in the same transaction that records the operation. The executor computes a plan as a pure function of desired state, observed state, and provider capabilities, then runs steps in order <code>INTERNAL → EXPOSED → ENTRY</code>, writing each step's intent before calling the provider. Each step has three outcomes: succeeded, failed, unknown. Failures roll back that member; unknown outcomes are never auto-retried and are reconciled by the next discovery pass. Same key with a different body is rejected (<code>422 IDEMPOTENCY_KEY_REUSED</code>); a concurrent apply on the same group is rejected (<code>409 OPERATION_IN_PROGRESS</code>). Keys are retained 30 days.</p>
+<h3 id="alternatives-considered">Alternatives Considered</h3>
+<h4 id="imperative-endpoints-per-action-restart-set-env-map-port">Imperative endpoints per action (<code>/restart</code>, <code>/set-env</code>, <code>/map-port</code>)</h4>
+<ul><li>Pros: simple to understand one at a time</li><li>Cons: no single place where the end state is known; partial failures leave the group in an undefined mix; retries duplicate side effects</li><li>Rejected</li></ul>
+<h4 id="generate-a-docker-compose-file-per-group-and-run-compose-up">Generate a docker-compose file per group and run <code>compose up</code></h4>
+<ul><li>Pros: familiar, declarative on Docker hosts</li><li>Cons: compose does not cover ECS (the ECS compose integration is retired); compose takes ownership of containers it did not create poorly; harder to express member-level rollback</li><li>Rejected: would split the model by runtime, defeating ADR-001</li></ul>
+<h4 id="check-for-an-existing-operation-then-act">Check for an existing operation, then act</h4>
+<ul><li>Pros: no unique index needed</li><li>Cons: a time-of-check/time-of-use race under retry storms, which is precisely when duplicates are most expensive</li><li>Rejected: the unique index is the mechanism</li></ul>
+<h3 id="consequences">Consequences</h3>
+<ul><li>The planner is unit-testable without infrastructure and its output is shown to the operator as a dry run before any apply.</li><li>A crash mid-apply leaves evidence (step <code>RUNNING</code> or <code>UNKNOWN</code>) rather than a silent half-state.</li><li>Operators must send an idempotency key; the console generates one per apply click and reuses it on retry.</li><li>Operations are never hard-deleted; they are the audit trail.</li></ul></article>
+</section>
+
+<footer>Sources: <code>CAPABILITY-MAP.md</code>, <code>SPEC.md</code>, <code>docs/architecture.md</code>, <code>docs/decisions/ADR-001…006</code>. These files move into the project repository on approval. Mermaid diagrams in the markdown render on GitHub; this page uses static equivalents.</footer>
+</div></body></html>
