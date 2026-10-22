@@ -62,7 +62,7 @@ catalog:
   tailwind-merge: ^3.3.1
   tailwindcss: ^4.1.14
   tsx: ^4.21.0
-  vite: ^7.3.2
+  vite: ^7.3.7
   wouter: ^3.3.5
   zod: ^3.25.76
 
@@ -160,3 +160,5 @@ overrides:
   esbuild: "0.28.2"
   # orval pins js-yaml to an exact version older than the CVE fix (>=4.3.2)
   js-yaml: '4.3.2'
+  # typography's latest release pins 6.0.10; 7.1.6+ fixes selector parsing DoS.
+  '@tailwindcss/typography>postcss-selector-parser': '^7.1.7'

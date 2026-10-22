@@ -3,3 +3,4 @@
 - [Postgres transaction rules](postgres-transaction-rules.md) — a raised unique violation aborts the Drizzle transaction; claim rows with ON CONFLICT DO NOTHING … RETURNING.
 - [Testing without vitest](testing-without-vitest.md) — node --test over an esbuild bundle of test/*.test.ts (inside the package so externals resolve); smoke.sh seeds a throwaway operator.
 - [Berth product facts](berth-product-facts.md) — user-stated scope (Docker over SSH + ECS EC2 launch type), checkpoint reporting cadence, what Phase 2 needs from the user.
+- [Dependency security exceptions](dependency-security.md) — why preview discovery avoids micromatch and typography needs a scoped parser override.
